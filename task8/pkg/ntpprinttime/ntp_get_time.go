@@ -1,4 +1,4 @@
-package ntpPrintTime
+package ntpprinttime
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 	"github.com/beevik/ntp"
 )
 
+// PrintNowTime print current time in a RFC3339Nano format
 func PrintNowTime() {
 	nowTime, err := ntp.Time("0.beevik-ntp.pool.ntp.org")
 	if err != nil {
