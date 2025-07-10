@@ -1,4 +1,4 @@
-module github.com/pozedorum/WB_project_2.8
+module github.com/pozedorum/WB_project_2.8/task8
 
 go 1.24.1
 
