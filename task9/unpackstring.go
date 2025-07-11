@@ -14,10 +14,16 @@ func UnpackString(input string) (string, error) {
 
 	var letter rune = 0
 	for ind := 0; ind < inputLen; ind++ {
-		if inputRune[ind] == '\\' && ind != inputLen-1 {
+		if inputRune[ind] == '\\' {
+			if ind == inputLen-1 {
+				return "", fmt.Errorf("wrong string format")
+			}
+			if letter != 0 {
+				bldr.WriteRune(letter)
+			}
 			ind++
 			letter = inputRune[ind]
-		} else if !unicode.IsDigit(inputRune[ind]) && ind != inputLen-1 {
+		} else if !unicode.IsDigit(inputRune[ind]) {
 			if letter != 0 {
 				_, err := bldr.WriteRune(letter)
 				if err != nil {
@@ -38,6 +44,9 @@ func UnpackString(input string) (string, error) {
 			bldr.WriteRune(inputRune[ind])
 			letter = 0
 		}
+	}
+	if letter != 0 {
+		bldr.WriteRune(letter)
 	}
 	return bldr.String(), nil
 }
