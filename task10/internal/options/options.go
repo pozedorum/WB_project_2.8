@@ -26,14 +26,14 @@ func ParceOptions() (*FlagStruct, []string) {
 		return flag.NormalizedName(name)
 	})
 
-	fs.KFlag = flagset.Int("k", 0, "sort by column number N")
-	fs.NFlag = flagset.Bool("n", false, "try to interpret strings as numbers and sort by it")
-	fs.RFlag = flagset.Bool("r", false, "sort in reverse order")
+	fs.KFlag = flagset.Int("k", 0, "sort by column number N")                                 //
+	fs.NFlag = flagset.Bool("n", false, "try to interpret strings as numbers and sort by it") //
+	fs.RFlag = flagset.Bool("r", false, "sort in reverse order")                              //
 	fs.UFlag = flagset.Bool("u", false, "output only sorted unique string")
-	fs.MFlag = flagset.Bool("m", false, "sort by month")
-	fs.BFlag = flagset.Bool("b", false, "ignore trailing blanks")
+	fs.MFlag = flagset.Bool("m", false, "sort by month")          //
+	fs.BFlag = flagset.Bool("b", false, "ignore trailing blanks") //
 	fs.CFlag = flagset.Bool("c", false, "check if data is sorted")
-	fs.HFlag = flagset.Bool("h", false, "sort by numerical value, taking into account suffixes (for example, K = kilobyte, M = megabyte).")
+	fs.HFlag = flagset.Bool("h", false, "sort by numerical value, taking into account suffixes (for example, K = kilobyte, M = megabyte).") //
 
 	err := flagset.Parse(os.Args[1:])
 	if err != nil {
