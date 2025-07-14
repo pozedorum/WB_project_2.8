@@ -1,8 +1,10 @@
-package sort
+package sortpkg
 
 import (
+	"bufio"
 	"fmt"
 	"log"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -61,9 +63,7 @@ func (ss *SortStruct) getKey(strInd int) string {
 	parts := strings.Fields(ss.lines[strInd])
 
 	if *ss.fs.KFlag < 1 || *ss.fs.KFlag > len(parts) { // k flag -- sort by column number N
-		log.Printf("Warning: -k %d is out of range (max %d), using first column\n",
-			*ss.fs.KFlag, len(parts))
-		resPart = parts[0]
+		return "0"
 	} else {
 		resPart = parts[*ss.fs.KFlag-1]
 	}
@@ -97,22 +97,30 @@ func parseNumber(resPart string) string {
 }
 
 func parseHumanNumber(resPart string) string {
-	numStr := strings.TrimRight(resPart, "KMGT")
+	if len(resPart) == 0 {
+		return "0"
+	}
+	numStr := resPart
+	multiplier := 1.0
+	lastChar := strings.ToUpper(resPart[len(resPart)-1:])
+	if strings.ContainsAny(lastChar, "KMGT") {
+		numStr = strings.TrimRight(resPart, "KMGT")
+		switch lastChar {
+		case "K":
+			multiplier = 1e3
+		case "M":
+			multiplier = 1e6
+		case "G":
+			multiplier = 1e9
+		case "T":
+			multiplier = 1e12
+		}
+	}
 	num, err := strconv.ParseFloat(numStr, 64)
 	if err != nil {
 		return "0"
 	}
-	switch strings.ToUpper(resPart[len(resPart)-1:]) {
-	case "K":
-		num *= 1e3
-	case "M":
-		num *= 1e6
-	case "G":
-		num *= 1e9
-	case "T":
-		num *= 1e12
-	}
-	return fmt.Sprintf("%020.0f", num)
+	return fmt.Sprintf("%020.0f", num*multiplier)
 }
 
 func parseMonth(resPart string) string {
@@ -121,4 +129,51 @@ func parseMonth(resPart string) string {
 	} else {
 		return "0"
 	}
+}
+
+//log.Printf("warning: -c %s file is empty", filepath)
+
+func isSorted(filepath string, fs options.FlagStruct) bool {
+	file, err := os.Open(filepath)
+	if err != nil {
+		log.Printf("Error opening file: %v", err)
+		return false
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	if !scanner.Scan() {
+		// Пустой файл считается отсортированным
+		return true
+	}
+
+	prevLine := scanner.Text()
+	ss := MakeSortStruct([]string{prevLine}, fs)
+	prevKey := ss.getKey(0)
+
+	for scanner.Scan() {
+		currentLine := scanner.Text()
+		ss.lines = []string{currentLine}
+		currentKey := ss.getKey(0)
+
+		// Сравниваем ключи с учетом флага -r
+		if *fs.RFlag {
+			if currentKey > prevKey {
+				return false
+			}
+		} else {
+			if currentKey < prevKey {
+				return false
+			}
+		}
+
+		prevKey = currentKey
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Printf("Error reading file: %v", err)
+		return false
+	}
+
+	return true
 }

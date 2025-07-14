@@ -18,29 +18,29 @@ type FlagStruct struct {
 	HFlag *bool
 }
 
-func ParceOptions() (*FlagStruct, []string) {
+func ParseOptions() (*FlagStruct, []string) {
 	var fs FlagStruct
 
-	flagset := flag.NewFlagSet("myflags", flag.ContinueOnError)
-	flagset.SetNormalizeFunc(func(f *flag.FlagSet, name string) flag.NormalizedName {
-		return flag.NormalizedName(name)
-	})
+	fs.KFlag = flag.IntP("k", "k", 1, "sort by column number N")
+	fs.NFlag = flag.BoolP("n", "n", false, "try to interpret strings as numbers and sort by it")
+	fs.RFlag = flag.BoolP("r", "r", false, "sort in reverse order")
+	fs.UFlag = flag.BoolP("u", "u", false, "output only sorted unique string")
+	fs.MFlag = flag.BoolP("m", "m", false, "sort by month")
+	fs.BFlag = flag.BoolP("b", "b", false, "ignore trailing blanks")
+	fs.CFlag = flag.BoolP("c", "c", false, "check if data is sorted")
+	fs.HFlag = flag.BoolP("h", "h", false, "sort by numerical value, taking into account suffixes")
 
-	fs.KFlag = flagset.Int("k", 0, "sort by column number N")                                 //
-	fs.NFlag = flagset.Bool("n", false, "try to interpret strings as numbers and sort by it") //
-	fs.RFlag = flagset.Bool("r", false, "sort in reverse order")                              //
-	fs.UFlag = flagset.Bool("u", false, "output only sorted unique string")
-	fs.MFlag = flagset.Bool("m", false, "sort by month")          //
-	fs.BFlag = flagset.Bool("b", false, "ignore trailing blanks") //
-	fs.CFlag = flagset.Bool("c", false, "check if data is sorted")
-	fs.HFlag = flagset.Bool("h", false, "sort by numerical value, taking into account suffixes (for example, K = kilobyte, M = megabyte).") //
-
-	err := flagset.Parse(os.Args[1:])
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+	// Переопределяем Usage для отображения только коротких флагов
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] input_file\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Options:\n")
+		flag.PrintDefaults()
 	}
-	return &fs, flagset.Args()
+
+	// Парсим аргументы
+	flag.Parse()
+
+	return &fs, flag.Args()
 }
 
 func (fs *FlagStruct) PrintFlags() {
