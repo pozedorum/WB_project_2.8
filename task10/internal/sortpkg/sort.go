@@ -34,10 +34,13 @@ func MakeSortStruct(lines []string, fs options.FlagStruct) *SortStruct {
 	return &SortStruct{lines, fs}
 }
 
+// res1 := getKey(ss.fs, ss.lines[i])
+// 		res2 := getKey(ss.fs, ss.lines[j])
+
 func (ss *SortStruct) StringsSort() {
 	sort.SliceStable(ss.lines, func(i, j int) bool {
-		res1 := ss.getKey(i)
-		res2 := ss.getKey(j)
+		res1 := getKey(ss.fs, ss.lines[i])
+		res2 := getKey(ss.fs, ss.lines[j])
 		if res1 == "0" {
 			return true
 		}
@@ -45,7 +48,7 @@ func (ss *SortStruct) StringsSort() {
 			return false
 		}
 		if *ss.fs.RFlag {
-			return res1 > res2
+			return res1 >= res2
 		}
 		return res1 < res2 // Устойчивая сортировка
 	})
@@ -57,31 +60,31 @@ func (ss *SortStruct) StringsSort() {
 //   - Месяцы: двузначный номер месяца (01-12)
 //   - Ошибка: если флаги конфликтуют
 //   - "0", если число 0, или строка без возможности сортировки
-func (ss *SortStruct) getKey(strInd int) string {
 
+func getKey(fs options.FlagStruct, str string) string {
 	var resPart string
-	parts := strings.Fields(ss.lines[strInd])
+	parts := strings.Fields(str)
 
-	if *ss.fs.KFlag < 1 || *ss.fs.KFlag > len(parts) { // k flag -- sort by column number N
+	if *fs.KFlag < 1 || *fs.KFlag > len(parts) { // k flag -- sort by column number N
 		return "0"
 	} else {
-		resPart = parts[*ss.fs.KFlag-1]
+		resPart = parts[*fs.KFlag-1]
 	}
 
-	if *ss.fs.BFlag { // b flag -- ignore trailing blanks
+	if *fs.BFlag { // b flag -- ignore trailing blanks
 		resPart = strings.TrimSpace(resPart)
 	}
 
-	if (*ss.fs.HFlag || *ss.fs.NFlag) && *ss.fs.MFlag {
+	if (*fs.HFlag || *fs.NFlag) && *fs.MFlag {
 		panic("flags -n/-h and -m are mutually exclusive")
 	}
 
 	switch {
-	case *ss.fs.HFlag:
+	case *fs.HFlag:
 		return parseHumanNumber(resPart)
-	case *ss.fs.NFlag:
+	case *fs.NFlag:
 		return parseNumber(resPart)
-	case *ss.fs.MFlag:
+	case *fs.MFlag:
 		return parseMonth(resPart)
 	default:
 		return resPart
@@ -131,8 +134,7 @@ func parseMonth(resPart string) string {
 	}
 }
 
-//log.Printf("warning: -c %s file is empty", filepath)
-
+// log.Printf("warning: -c %s file is empty", filepath)
 func isSorted(filepath string, fs options.FlagStruct) bool {
 	file, err := os.Open(filepath)
 	if err != nil {
@@ -148,13 +150,11 @@ func isSorted(filepath string, fs options.FlagStruct) bool {
 	}
 
 	prevLine := scanner.Text()
-	ss := MakeSortStruct([]string{prevLine}, fs)
-	prevKey := ss.getKey(0)
+	prevKey := getKey(fs, prevLine)
 
 	for scanner.Scan() {
 		currentLine := scanner.Text()
-		ss.lines = []string{currentLine}
-		currentKey := ss.getKey(0)
+		currentKey := getKey(fs, currentLine)
 
 		// Сравниваем ключи с учетом флага -r
 		if *fs.RFlag {

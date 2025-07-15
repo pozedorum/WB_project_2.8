@@ -1,3 +1,4 @@
+// Package sortpkg contains realisation og external sort for file
 package sortpkg
 
 import (
@@ -21,12 +22,10 @@ type ExternalSortStruct struct {
 }
 
 func MakeExternalSortStruct(fs options.FlagStruct, inputFile, outputFile string, chunkSize int) *ExternalSortStruct {
-
 	return &ExternalSortStruct{fs, make([]string, 0), inputFile, outputFile, chunkSize}
 }
 
 func ExternalSort(inputFile, outputFile string, fs options.FlagStruct) error {
-
 	ess := MakeExternalSortStruct(fs, inputFile, outputFile, ConstChunkSize)
 	if *ess.fs.CFlag {
 		if isSorted(ess.inputFile, fs) {
@@ -69,7 +68,6 @@ func (ess *ExternalSortStruct) splitAndSort() error {
 	}
 	if len(buffer) > 0 {
 		ess.sortAndSaveChunk(fileInd, buffer)
-
 	}
 
 	return nil
@@ -127,6 +125,7 @@ func (ess *ExternalSortStruct) mergeChunks() error {
 
 	var lastLine string
 	firstLine := true
+	var isFirst bool = true
 
 	for h.Len() > 0 {
 		item := heap.Pop(h).(HeapItem)
@@ -134,20 +133,32 @@ func (ess *ExternalSortStruct) mergeChunks() error {
 		if *ess.fs.UFlag {
 			if firstLine {
 				lastLine = item.line
-				writer.WriteString(item.line + "\n")
+				if !isFirst {
+					writer.WriteString("\n")
+				}
+				writer.WriteString(item.line)
 				firstLine = false
-			} else if item.line != lastLine {
+				isFirst = false
+			} else if getKey(ess.fs, item.line) != getKey(ess.fs, lastLine) {
+				// fmt.Println(getKey(ess.fs, item.line), getKey(ess.fs, lastLine))
 				lastLine = item.line
-				writer.WriteString(item.line + "\n")
+				if !isFirst {
+					writer.WriteString("\n")
+				}
+				writer.WriteString(item.line)
+				isFirst = false
 			}
 		} else {
-			writer.WriteString(item.line + "\n")
+			if !isFirst {
+				writer.WriteString("\n")
+			}
+			writer.WriteString(item.line)
+			isFirst = false
 		}
 
 		// Продвигаем сканер и добавляем следующую строку в кучу
 		if scanners[item.index].Scan() {
 			nextLine := scanners[item.index].Text()
-			// Если включён -u, пропускаем строки, которые уже равны lastLine
 			if !(*ess.fs.UFlag && nextLine == lastLine) {
 				heap.Push(h, HeapItem{
 					line:  nextLine,
@@ -162,6 +173,6 @@ func (ess *ExternalSortStruct) mergeChunks() error {
 		f.Close()
 		os.Remove(f.Name())
 	}
-
+	fmt.Printf("result of sort locales by path: %s\n", ess.outputFile)
 	return nil
 }
