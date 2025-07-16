@@ -1,6 +1,6 @@
 # Исходный тестовый файл
 TEST_INPUT := tests/test_input.txt
-TEST_OUTPUT := $(basename $(TEST_INPUT))ed.txt
+TEST_OUTPUT := $(basename $(TEST_INPUT))_sorted.txt
 
 # Список всех тестов
 TESTS := \
@@ -35,8 +35,10 @@ all: mysort
 small_test: mysort
 	./mysort -r tests/small_test.txt
 
+
 mysort: clean
 	go build -o mysort ./cmd/main.go
+
 
 
 
@@ -54,7 +56,7 @@ clean:
 $(TESTS): %: $(TEST_INPUT)
 	@echo "Запуск теста $@ с флагами: $($@_FLAGS)"
 	@rm -f $(TEST_OUTPUT)
-	@./mysort $($@_FLAGS) $(TEST_INPUT)
+	@./mysort $($@_FLAGS) $(TEST_INPUT) >> $(TEST_OUTPUT)
 	@echo "Результат сохранен в $(TEST_OUTPUT)"
 	@echo "Ожидаемый результат в tets/expected_$@.txt"
 #	@echo "Для сравнения выполните:"

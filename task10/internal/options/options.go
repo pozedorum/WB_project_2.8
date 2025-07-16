@@ -25,7 +25,7 @@ func ParseOptions() (*FlagStruct, []string) {
 	fs.NFlag = flag.BoolP("n", "n", false, "try to interpret strings as numbers and sort by it")
 	fs.RFlag = flag.BoolP("r", "r", false, "sort in reverse order")
 	fs.UFlag = flag.BoolP("u", "u", false, "output only sorted unique string")
-	fs.MFlag = flag.BoolP("m", "m", false, "sort by month")
+	fs.MFlag = flag.BoolP("M", "M", false, "sort by month")
 	fs.BFlag = flag.BoolP("b", "b", false, "ignore trailing blanks")
 	fs.CFlag = flag.BoolP("c", "c", false, "check if data is sorted")
 	fs.HFlag = flag.BoolP("h", "h", false, "sort by numerical value, taking into account suffixes")

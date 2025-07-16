@@ -2,17 +2,19 @@
 
 # Конфигурация тестов
 TEST_INPUT="tests/test_input.txt"
+EXPECTED_OUTPUT="tests/test_input_expected.txt"
+ACTUAL_OUTPUT="tests/test_input_sorted.txt"
 
 TESTS=(
-    # Название теста         Флаги        Ожидаемый вывод
-    "basic_sort"            ""           "tests/expected_basic.txt"
-    "numeric_sort"          "-n -k 2"    "tests/expected_numeric.txt"
-    "month_sort"            "-M -k 3"    "tests/expected_month.txt"
-    "human_sort"            "-h -k 4"    "tests/expected_human.txt"
-    "reverse_sort"          "-r"         "tests/expected_reverse.txt"
-    "unique_sort"           "-u"         "tests/expected_unique.txt"
-    "combined_sort"         "-n -r -k 2" "tests/expected_combined.txt"
-    "complex_sort"          "-k 3 -M -u" "tests/expected_complex.txt"
+    # Название теста         Флаги        Ожидаемый вывод (не используется)
+    "basic_sort"            ""           ""
+    "numeric_sort"          "-n -k 2"    ""
+    "month_sort"            "-M -k 3"    ""  # Оригинальный sort использует -M для месяцев
+    "human_sort"            "-h -k 4"    ""
+    "reverse_sort"          "-r"         ""
+    "unique_sort"           "-u"         ""
+    "combined_sort"         "-n -r -k 2" ""
+    "complex_sort"          "-k 3 -M -u" ""
 )
 
 # Функция сравнения результатов
@@ -22,18 +24,21 @@ run_test() {
     local expected_file=$3
     
     echo "Running test: $test_name"
+    echo "Command: ./mysort $flags $TEST_INPUT"
     
-    # Удаляем предыдущий результат, если есть
-    rm -f "${TEST_INPUT%.txt}_sorted.txt"
-    echo "Command: ./mysort $flags $TEST_INPUT >> tests/test_input_sorted.txt"
+    # Удаляем предыдущие результаты
+    rm -f "$EXPECTED_OUTPUT" "$ACTUAL_OUTPUT"
     
+    # 1. Запускаем оригинальный sort и сохраняем результат
+    echo "Original sort command: sort $flags $TEST_INPUT"
+    sort $flags "$TEST_INPUT" > "$EXPECTED_OUTPUT"
     
+    # 2. Запускаем вашу утилиту
+    ./mysort $flags "$TEST_INPUT" >> "$ACTUAL_OUTPUT"
+    # mv "${TEST_INPUT%.txt}_sorted.txt" "$ACTUAL_OUTPUT"
     
-    # Выполняем команду
-    ./mysort $flags "$TEST_INPUT" >> "tests/test_input_sorted.txt"
-    
-    # Сравниваем с ожидаемым результатом
-    if diff -u "$expected_file" "${TEST_INPUT%.txt}_sorted.txt" > "diff_${test_name}.txt"; then
+    # 3. Сравниваем результаты
+    if diff -u "$EXPECTED_OUTPUT" "$ACTUAL_OUTPUT" > "diff_${test_name}.txt"; then
         echo "✅ PASSED: $test_name"
         rm "diff_${test_name}.txt"
         return 0

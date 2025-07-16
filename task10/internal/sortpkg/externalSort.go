@@ -83,7 +83,9 @@ func (ess *ExternalSortStruct) sortAndSaveChunk(ind int, lines []string) {
 	defer f.Close()
 
 	for _, line := range ss.lines {
-		f.WriteString(line + "\n")
+		if _, err := f.WriteString(line + "\n"); err != nil {
+			fmt.Printf("ExternalSortStruct.sortAndSaveChunk - file.WriteString: %v", err)
+		}
 	}
 
 	ess.tempFilesList = append(ess.tempFilesList, tmpFile)
@@ -125,7 +127,6 @@ func (ess *ExternalSortStruct) mergeChunks() error {
 
 	var lastLine string
 	firstLine := true
-	var isFirst bool = true
 
 	for h.Len() > 0 {
 		item := heap.Pop(h).(HeapItem)
@@ -133,27 +134,23 @@ func (ess *ExternalSortStruct) mergeChunks() error {
 		if *ess.fs.UFlag {
 			if firstLine {
 				lastLine = item.line
-				if !isFirst {
-					writer.WriteString("\n")
+
+				if _, err := writer.WriteString(item.line + "\n"); err != nil {
+					fmt.Printf("ExternalSortStruct.mergeChunks - writer.WriteString(1): %v", err)
 				}
-				writer.WriteString(item.line)
 				firstLine = false
-				isFirst = false
 			} else if getKey(ess.fs, item.line) != getKey(ess.fs, lastLine) {
-				// fmt.Println(getKey(ess.fs, item.line), getKey(ess.fs, lastLine))
+
 				lastLine = item.line
-				if !isFirst {
-					writer.WriteString("\n")
+
+				if _, err := writer.WriteString(item.line + "\n"); err != nil {
+					fmt.Printf("ExternalSortStruct.mergeChunks - writer.WriteString(2): %v", err)
 				}
-				writer.WriteString(item.line)
-				isFirst = false
 			}
 		} else {
-			if !isFirst {
-				writer.WriteString("\n")
+			if _, err := writer.WriteString(item.line + "\n"); err != nil {
+				fmt.Printf("ExternalSortStruct.mergeChunks - writer.WriteString(3): %v", err)
 			}
-			writer.WriteString(item.line)
-			isFirst = false
 		}
 
 		// Продвигаем сканер и добавляем следующую строку в кучу
@@ -173,6 +170,6 @@ func (ess *ExternalSortStruct) mergeChunks() error {
 		f.Close()
 		os.Remove(f.Name())
 	}
-	fmt.Printf("result of sort locales by path: %s\n", ess.outputFile)
+	//fmt.Printf("result of sort locales by path: %s\n", ess.outputFile)
 	return nil
 }
