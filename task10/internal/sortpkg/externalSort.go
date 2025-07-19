@@ -8,7 +8,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/pozedorum/WB_project_2.8/task10/internal/options"
+	"github.com/pozedorum/WB_project_2/task10/pkg/options"
 )
 
 const ConstChunkSize = 10_000 // Чанки по 10k строк (тут я не знаю, насколько ограничивать размер чанка, потом подумаю)

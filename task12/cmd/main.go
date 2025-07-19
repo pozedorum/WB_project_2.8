@@ -4,8 +4,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/pozedorum/WB_project_2/task10/internal/sortpkg"
-	"github.com/pozedorum/WB_project_2/task10/pkg/options"
+	//"github.com/pozedorum/WB_project_2/task12/internal/sortpkg"
+	"github.com/pozedorum/WB_project_2/task12/pkg/options"
 )
 
 func main() {
