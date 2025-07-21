@@ -1,0 +1,4 @@
+apple:banana:cherry:date:elderberry
+1:2:3:4:5
+:empty:start::middle::end
+one:two:three:four:five
