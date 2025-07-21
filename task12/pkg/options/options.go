@@ -1,3 +1,4 @@
+// Package options содержит стуктуру FlagStruct, используется для парсинга флагов командной строки
 package options
 
 import (
@@ -8,48 +9,61 @@ import (
 )
 
 type FlagStruct struct {
-	KFlag *int
-	NFlag *bool
-	RFlag *bool
-	UFlag *bool
-	MFlag *bool
-	BFlag *bool
-	CFlag *bool
-	HFlag *bool
+	AFlag      *int
+	BFlag      *int
+	CFlag      *int
+	SmallCFlag *bool
+	IFlag      *bool
+	VFlag      *bool
+	FFlag      *bool
+	NFlag      *bool
+	Pattern    string
 }
 
 func ParseOptions() (*FlagStruct, []string) {
 	var fs FlagStruct
 
-	fs.KFlag = flag.IntP("k", "k", 1, "sort by column number N")
-	fs.NFlag = flag.BoolP("n", "n", false, "try to interpret strings as numbers and sort by it")
-	fs.RFlag = flag.BoolP("r", "r", false, "sort in reverse order")
-	fs.UFlag = flag.BoolP("u", "u", false, "output only sorted unique string")
-	fs.MFlag = flag.BoolP("M", "M", false, "sort by month")
-	fs.BFlag = flag.BoolP("b", "b", false, "ignore trailing blanks")
-	fs.CFlag = flag.BoolP("c", "c", false, "check if data is sorted")
-	fs.HFlag = flag.BoolP("h", "h", false, "sort by numerical value, taking into account suffixes")
+	fs.AFlag = flag.IntP("A", "A", 0, "Print N lines after each match")
+	fs.BFlag = flag.IntP("B", "B", 0, "Print N lines before each match")
+	fs.CFlag = flag.IntP("C", "C", 0, "Print N lines around each match (A+B)")
+	fs.SmallCFlag = flag.BoolP("c", "c", false, "Only print count of matching lines")
+	fs.IFlag = flag.BoolP("i", "i", false, "Ignore case distinctions")
+	fs.VFlag = flag.BoolP("v", "v", false, "Select non-matching lines")
+	fs.FFlag = flag.BoolP("F", "F", false, "Interpret pattern as literal string")
+	fs.NFlag = flag.BoolP("n", "n", false, "Print line numbers with output")
 
-	// Переопределяем Usage для отображения только коротких флагов
+	ePattern := flag.StringP("e", "e", "", "Pattern to search for")
+
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [options] input_file\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "Options:\n")
+		fmt.Fprintf(os.Stderr, "Usage: %s [OPTIONS] -e PATTERN [FILE...]\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "       %s [OPTIONS] PATTERN [FILE...]\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 
-	// Парсим аргументы
 	flag.Parse()
 
-	return &fs, flag.Args()
+	args := flag.Args()
+
+	if *ePattern != "" {
+		fs.Pattern = *ePattern
+	} else if len(args) < 1 {
+		flag.Usage()
+		os.Exit(1)
+	} else {
+		fs.Pattern = args[0]
+		args = args[1:]
+	}
+
+	return &fs, args
 }
 
 func (fs *FlagStruct) PrintFlags() {
-	fmt.Println("flag k -", *(fs.KFlag))
-	fmt.Println("flag n -", *(fs.NFlag))
-	fmt.Println("flag r -", *(fs.RFlag))
-	fmt.Println("flag u -", *(fs.UFlag))
-	fmt.Println("flag m -", *(fs.MFlag))
-	fmt.Println("flag b -", *(fs.BFlag))
-	fmt.Println("flag c -", *(fs.CFlag))
-	fmt.Println("flag h -", *(fs.HFlag))
+	fmt.Println("flag A -", *(fs.AFlag))
+	fmt.Println("flag B -", *(fs.BFlag))
+	fmt.Println("flag C -", *(fs.CFlag))
+	fmt.Println("flag c -", *(fs.SmallCFlag))
+	fmt.Println("flag i -", *(fs.IFlag))
+	fmt.Println("flag v -", *(fs.VFlag))
+	fmt.Println("flag F -", *(fs.FFlag))
+	fmt.Println("flag i -", *(fs.IFlag))
 }

@@ -1,38 +1,52 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 
-	//"github.com/pozedorum/WB_project_2/task12/internal/sortpkg"
+	"github.com/pozedorum/WB_project_2/task12/internal/grep"
 	"github.com/pozedorum/WB_project_2/task12/pkg/options"
 )
 
 func main() {
+	// Парсинг флагов (остаётся таким же)
 	fs, args := options.ParseOptions()
 
 	// Определяем источник ввода
-	if len(args) == 1 {
-		//fmt.Println("here")
-		// Сортировка файла с выводом в stdout
-		err := sortpkg.ExternalSortToStdout(args[0], *fs)
+	switch len(args) {
+	case 1:
+		// Обработка файла (аргумент - имя файла)
+		file, err := os.Open(args[0])
+		if err != nil {
+			log.Fatalf("grep: %s: %v", args[0], err)
+		}
+		defer file.Close()
+
+		err = grep.Grep(file, *fs, os.Stdout)
 		if err != nil {
 			log.Fatal(err)
 		}
-	} else if len(args) == 0 {
+
+	case 0:
 		// Проверяем, есть ли данные в stdin
 		stat, _ := os.Stdin.Stat()
 		if (stat.Mode() & os.ModeCharDevice) == 0 {
-			// Сортировка stdin с выводом в stdout
-			err := sortpkg.ProcessStdio(*fs)
+			// Обработка pipe/redirect из stdin
+			err := grep.Grep(os.Stdin, *fs, os.Stdout)
 			if err != nil {
 				log.Fatal(err)
 			}
 		} else {
-			sortpkg.ProcessInteractiveInput(*fs)
-			//log.Fatal("No input file or stdin data provided")
+			// Интерактивный режим (ожидание ввода с клавиатуры)
+			fmt.Println("Waiting for input (press Ctrl+D to finish):")
+			err := grep.Grep(os.Stdin, *fs, os.Stdout)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
-	} else {
-		log.Fatal("too much files ")
+
+	default:
+		log.Fatal("grep: too many arguments")
 	}
 }
