@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log"
+	"os"
 	"strings"
 
 	"github.com/pozedorum/WB_project_2/task13/options"
@@ -21,6 +23,23 @@ func Cut(input io.Reader, fs options.FlagStruct, writer io.Writer) error {
 	}
 
 	return nil
+}
+
+func ProcessFiles(fs options.FlagStruct, args []string) {
+	for _, filename := range args {
+		file, err := os.Open(filename)
+		if err != nil {
+			log.Printf("cut: %s: %v", filename, err)
+			continue
+		}
+
+		err = Cut(file, fs, os.Stdout)
+		file.Close()
+
+		if err != nil {
+			log.Printf("cut: %s: %v", filename, err)
+		}
+	}
 }
 
 func processLine(fs options.FlagStruct, line string, writer io.Writer) {
@@ -44,7 +63,7 @@ func processLine(fs options.FlagStruct, line string, writer io.Writer) {
 	}
 
 	// Выводим результат
-	if len(output) > 0 {
-		fmt.Fprintln(writer, strings.Join(output, string(fs.Delimiter)))
-	}
+	//if len(output) > 0 {
+	fmt.Fprintln(writer, strings.Join(output, string(fs.Delimiter)))
+	//}
 }

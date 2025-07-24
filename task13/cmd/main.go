@@ -1,3 +1,4 @@
+// main.go
 package main
 
 import (
@@ -11,19 +12,20 @@ import (
 func main() {
 	fs, args := options.ParseOptions()
 
-	if len(args) > 0 {
-		log.Fatal("cut: too many arguments (this version supports only stdin)")
+	// Если нет аргументов - читаем из stdin
+	if len(args) == 0 {
+		stat, _ := os.Stdin.Stat()
+		if (stat.Mode() & os.ModeCharDevice) == 0 {
+			err := cut.Cut(os.Stdin, *fs, os.Stdout)
+			if err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			log.Fatal("cut: no input provided (use file argument or pipe/redirect)")
+		}
+		return
+	} else {
+		cut.ProcessFiles(*fs, args)
 	}
 
-	stat, _ := os.Stdin.Stat()
-	if (stat.Mode() & os.ModeCharDevice) == 0 {
-		// Режим pipe/redirect
-		err := cut.Cut(os.Stdin, *fs, os.Stdout)
-		if err != nil {
-			log.Fatal(err)
-		}
-	} else {
-		// Интерактивный режим
-		log.Fatal("cut: no input provided (use pipe or redirect)")
-	}
 }

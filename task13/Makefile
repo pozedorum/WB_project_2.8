@@ -1,7 +1,7 @@
 
-all: clean mycut
+all: mycut
 
-mycut:
+mycut: clean
 	go build -o mycut cmd/main.go
 
 

@@ -4,6 +4,7 @@ package options
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	flag "github.com/spf13/pflag"
@@ -44,7 +45,11 @@ func ParseOptions() (*FlagStruct, []string) {
 		flag.Usage()
 		os.Exit(1)
 	}
-	fs.ParseFields(*FFlag)
+	if err := fs.ParseFields(*FFlag); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		flag.Usage()
+		os.Exit(1)
+	}
 
 	runeDelimiter := []rune(*DFlag)
 	if len(runeDelimiter) != 1 {
@@ -100,7 +105,7 @@ func (fs *FlagStruct) ParseFields(FFlag string) error {
 			}
 		}
 	}
-
+	sort.Ints(fs.Fields)
 	return nil
 }
 
