@@ -2,62 +2,102 @@ package parcer
 
 import (
 	"fmt"
-	"strings"
-	"unicode"
 )
 
-func ParceLine(str string) error {
-	words, err := TokenizeString(str)
-	if err != nil {
-		return err
-	}
+// TODO: Добавить обработку FD редиректов (2>&1)
 
+func ParceLine(str string) (*Command, error) {
+	tokens, err := tokenizeString(str)
+	if err != nil {
+		return nil, err
+	}
+	cmd, err := parceTokens(tokens)
+	if err != nil {
+		return nil, err
+	}
+	return cmd, nil
 }
 
-func TokenizeString(str string) ([]string, error) {
-	var token strings.Builder
-	res := make([]string, 0, strings.Count(str, " "))
+func parceTokens(tokens []string) (*Command, error) {
+	tokensCount := len(tokens)
+	var prev *Command
+	var cmd *Command
 
-	var (
-		isIntoDoubleQuotes = false
-		isIntoSingleQuotes = false
-		isShielded         = false
-	)
-	for _, rn := range []rune(str) {
-		switch {
-		case isShielded:
-			token.WriteRune(rn)
-			isShielded = false
-		case rn == '\\' && !isIntoSingleQuotes:
-			isShielded = true
-		case rn == '\'' && !isIntoDoubleQuotes:
-			isIntoSingleQuotes = !isIntoSingleQuotes
-		case rn == '"' && !isIntoSingleQuotes:
-			isIntoDoubleQuotes = !isIntoDoubleQuotes
-		case isControlSymbol(rn) && !isIntoSingleQuotes && !isIntoDoubleQuotes && !isShielded:
-			if token.Len() > 0 {
-				res = append(res, token.String())
-				token.Reset()
+	ind := 0
+	for ind < tokensCount {
+		current := &Command{}
+
+		for ind < tokensCount && !isControlOperator(tokens[ind]) {
+			if isRedirectOperator(tokens[ind]) {
+				if ind+1 >= tokensCount {
+					return nil, fmt.Errorf("error: pipeline has no file")
+				}
+
+				comRedirect := Redirect{
+					Type: tokens[ind],
+					File: tokens[ind+1],
+				}
+				current.Redirects = append(current.Redirects, comRedirect)
+				ind += 2
+			} else {
+				if current.Name == "" {
+					current.Name = tokens[ind]
+				} else {
+					current.Args = append(current.Args, tokens[ind])
+				}
+				ind++
 			}
-			res = append(res, string(rn)) // Добавляем сам спецсимвол как отдельный токен
-		case unicode.IsSpace(rn) && !isIntoSingleQuotes && !isIntoDoubleQuotes && !isShielded:
-			if token.Len() > 0 {
-				res = append(res, token.String())
-				token.Reset()
+		}
+
+		if cmd == nil {
+			cmd = current
+		} else {
+			prev.PipeTo = current
+		}
+		prev = current
+
+		for ind < tokensCount {
+			switch tokens[ind] {
+			case Pipe:
+				ind++
+			case And, Or:
+				operator := tokens[ind]
+				ind++
+
+				if ind >= tokensCount {
+					return nil, fmt.Errorf("error: after %s a command is expected", operator)
+				}
+
+				if current.AndNext != nil || current.OrNext != nil {
+					return nil, fmt.Errorf("error: multiple control operators")
+				}
+				nextCommand, err := parceTokens(tokens[ind:])
+				if err != nil {
+					return nil, err
+				}
+
+				if operator == And {
+					current.AndNext = nextCommand
+				} else {
+					current.OrNext = nextCommand
+				}
+
+				return cmd, nil
+			default:
+				return nil, fmt.Errorf("error: unexpected operator: %s", tokens[ind])
 			}
-		default:
-			token.WriteRune(rn)
 		}
 	}
-	if isIntoSingleQuotes || isIntoDoubleQuotes {
-		return nil, fmt.Errorf("unclosed quotes in input")
-	}
-	if token.Len() > 0 {
-		res = append(res, token.String())
-	}
-	return res, nil
+
+	return cmd, nil
 }
 
-func isControlSymbol(r rune) bool {
+func isControlOperator(token string) bool {
+	_, ok := controlOperators[token]
+	return ok
+}
 
+func isRedirectOperator(token string) bool {
+	_, ok := redirectOperators[token]
+	return ok
 }
