@@ -1,5 +1,7 @@
 package parcer
 
+import "errors"
+
 type Command struct {
 	Name      string
 	Args      []string
@@ -14,6 +16,16 @@ type Redirect struct {
 	File string // имя файла
 	IsFd bool   // если true, File — это дескриптор (например, "2>&1")
 }
+
+// Константы ошибок
+var (
+	ErrEmptyString          = errors.New("empty command string")
+	ErrNoFileForRedirect    = errors.New("no file specified for redirect")
+	ErrUnexpectedOperator   = errors.New("unexpected operator")
+	ErrMissingAfterOperator = errors.New("command expected after operator")
+	ErrMultipleOperators    = errors.New("multiple control operators")
+	ErrEmptyCommand         = errors.New("empty command before operator")
+)
 
 const (
 	// Основные операторы управления потоком

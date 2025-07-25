@@ -7,6 +7,7 @@ import (
 )
 
 // TODO: Сделать обработку системных переменных через $
+// TODO: Опционально добить обработку оставшихся токенов из structAndConst
 func tokenizeString(str string) ([]string, error) {
 	var tokens []string
 	var token strings.Builder

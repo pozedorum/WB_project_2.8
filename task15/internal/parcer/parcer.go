@@ -1,9 +1,5 @@
 package parcer
 
-import (
-	"fmt"
-)
-
 // TODO: Добавить обработку FD редиректов (2>&1)
 
 func ParceLine(str string) (*Command, error) {
@@ -20,17 +16,24 @@ func ParceLine(str string) (*Command, error) {
 
 func parceTokens(tokens []string) (*Command, error) {
 	tokensCount := len(tokens)
-	var prev *Command
-	var cmd *Command
 
+	if tokensCount == 0 {
+		return nil, ErrEmptyString
+	}
+
+	var (
+		prev    *Command
+		cmd     *Command
+		current *Command
+	)
 	ind := 0
 	for ind < tokensCount {
-		current := &Command{}
+		current = &Command{}
 
 		for ind < tokensCount && !isControlOperator(tokens[ind]) {
 			if isRedirectOperator(tokens[ind]) {
 				if ind+1 >= tokensCount {
-					return nil, fmt.Errorf("error: pipeline has no file")
+					return nil, ErrNoFileForRedirect
 				}
 
 				comRedirect := Redirect{
@@ -56,40 +59,54 @@ func parceTokens(tokens []string) (*Command, error) {
 		}
 		prev = current
 
-		for ind < tokensCount {
-			switch tokens[ind] {
-			case Pipe:
-				ind++
-			case And, Or:
-				operator := tokens[ind]
-				ind++
+		if ind >= tokensCount {
+			break
+		}
 
-				if ind >= tokensCount {
-					return nil, fmt.Errorf("error: after %s a command is expected", operator)
-				}
+		if current.IsEmpty() {
+			return nil, ErrEmptyCommand
+		}
+		switch tokens[ind] {
+		case Pipe:
+			ind++
 
-				if current.AndNext != nil || current.OrNext != nil {
-					return nil, fmt.Errorf("error: multiple control operators")
-				}
-				nextCommand, err := parceTokens(tokens[ind:])
-				if err != nil {
-					return nil, err
-				}
+		case And, Or:
+			operator := tokens[ind]
+			ind++
 
-				if operator == And {
-					current.AndNext = nextCommand
-				} else {
-					current.OrNext = nextCommand
-				}
-
-				return cmd, nil
-			default:
-				return nil, fmt.Errorf("error: unexpected operator: %s", tokens[ind])
+			if ind >= tokensCount {
+				return nil, ErrMissingAfterOperator
 			}
+
+			if current.AndNext != nil || current.OrNext != nil {
+				return nil, ErrMultipleOperators
+			}
+			nextCommand, err := parceTokens(tokens[ind:])
+			if err != nil {
+				return nil, err
+			}
+			if operator == And {
+				current.AndNext = nextCommand
+			} else {
+				current.OrNext = nextCommand
+			}
+
+			return cmd, nil
+		default:
+			return nil, ErrUnexpectedOperator
 		}
 	}
 
 	return cmd, nil
+}
+
+func (c *Command) IsEmpty() bool {
+	return c.Name == "" &&
+		len(c.Args) == 0 &&
+		len(c.Redirects) == 0 &&
+		c.PipeTo == nil &&
+		c.AndNext == nil &&
+		c.OrNext == nil
 }
 
 func isControlOperator(token string) bool {
