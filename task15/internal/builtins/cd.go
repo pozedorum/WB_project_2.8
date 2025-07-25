@@ -1,6 +1,10 @@
 package builtins
 
-import "io"
+import (
+	"io"
+
+	"task15/internal/core"
+)
 
 type CdUtil struct{}
 
@@ -12,6 +16,6 @@ func (cdu CdUtil) Name() string {
 	return "cd"
 }
 
-func (cdu *CdUtil) Execute(args []string, env Environment, w io.Writer) error {
+func (cdu *CdUtil) Execute(args []string, env core.Environment, w io.Writer) error {
 	return nil
 }

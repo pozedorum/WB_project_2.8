@@ -1,19 +1,15 @@
 // Package builtins реализует наобр стандартных команд и утилит
 package builtins
 
-import "io"
+import (
+	"io"
 
-type Environment interface {
-	Getwd() (string, error)         // Получить текущую директорию
-	Chdir(dir string) error         // Сменить директорию
-	Getenv(key string) string       // Получить переменную окружения
-	Setenv(key, value string) error // Установить переменную
-	Environ() []string              // Получить все переменные окружения
-}
+	"task15/internal/core"
+)
 
 type BuiltinCommand interface {
-	Name() string                                              // Возвращает имя команды
-	Execute(args []string, env Environment, w io.Writer) error // Выполняет команду
+	Name() string                                                   // Возвращает имя команды
+	Execute(args []string, env core.Environment, w io.Writer) error // Выполняет команду
 }
 
 type Registry struct {

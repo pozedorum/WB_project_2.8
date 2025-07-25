@@ -1,6 +1,10 @@
 package builtins
 
-import "io"
+import (
+	"io"
+
+	"task15/internal/core"
+)
 
 type KillUtil struct{}
 
@@ -12,6 +16,6 @@ func (kilu KillUtil) Name() string {
 	return "kill"
 }
 
-func (kilu *KillUtil) Execute(args []string, env Environment, w io.Writer) error {
+func (kilu *KillUtil) Execute(args []string, env core.Environment, w io.Writer) error {
 	return nil
 }
