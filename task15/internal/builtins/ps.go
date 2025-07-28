@@ -16,6 +16,6 @@ func (psu PsUtil) Name() string {
 	return "ps"
 }
 
-func (psu *PsUtil) Execute(args []string, env core.Environment, w io.Writer) error {
+func (psu *PsUtil) Execute(args []string, env core.Environment, stdin io.Reader, stdout io.Writer) error {
 	return nil
 }

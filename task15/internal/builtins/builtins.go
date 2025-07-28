@@ -8,8 +8,8 @@ import (
 )
 
 type BuiltinCommand interface {
-	Name() string                                                   // Возвращает имя команды
-	Execute(args []string, env core.Environment, w io.Writer) error // Выполняет команду
+	Name() string                                                                         // Возвращает имя команды
+	Execute(args []string, env core.Environment, stdin io.Reader, stdout io.Writer) error // Выполняет команду
 }
 
 type Registry struct {
@@ -39,4 +39,30 @@ func (r *Registry) Register(newCom BuiltinCommand) {
 func (r *Registry) GetCommand(name string) (BuiltinCommand, bool) {
 	cmd, ok := r.commands[name]
 	return cmd, ok
+}
+
+// =====================================
+// Функции для тестов
+
+type genericCommand struct {
+	name    string
+	execute func(args []string, env core.Environment, stdin io.Reader, stdout io.Writer) error
+}
+
+func NewGenericCommand(
+	name string,
+	executeFunc func(args []string, env core.Environment, stdin io.Reader, stdout io.Writer) error,
+) BuiltinCommand {
+	return &genericCommand{
+		name:    name,
+		execute: executeFunc,
+	}
+}
+
+func (g *genericCommand) Name() string {
+	return g.name
+}
+
+func (g *genericCommand) Execute(args []string, env core.Environment, stdin io.Reader, stdout io.Writer) error {
+	return g.execute(args, env, stdin, stdout)
 }

@@ -3,6 +3,8 @@ package parcer
 import (
 	"fmt"
 	"testing"
+
+	"task15/internal/core"
 )
 
 func TestTokenizeString(t *testing.T) {
@@ -129,14 +131,14 @@ func TestParceTokens(t *testing.T) {
 	tests := []struct {
 		name     string
 		tokens   []string
-		expected *Command
+		expected *core.Command
 		wantErr  bool
 	}{
 		// Простые команды
 		{
 			name:   "simple command",
 			tokens: []string{"ls", "-l"},
-			expected: &Command{
+			expected: &core.Command{
 				Name: "ls",
 				Args: []string{"-l"},
 			},
@@ -144,10 +146,10 @@ func TestParceTokens(t *testing.T) {
 		{
 			name:   "command with redirect",
 			tokens: []string{"echo", "hello", ">", "file.txt"},
-			expected: &Command{
+			expected: &core.Command{
 				Name: "echo",
 				Args: []string{"hello"},
-				Redirects: []Redirect{
+				Redirects: []core.Redirect{
 					{Type: ">", File: "file.txt"},
 				},
 			},
@@ -157,9 +159,9 @@ func TestParceTokens(t *testing.T) {
 		{
 			name:   "single pipe",
 			tokens: []string{"ls", "|", "grep", "test"},
-			expected: &Command{
+			expected: &core.Command{
 				Name: "ls",
-				PipeTo: &Command{
+				PipeTo: &core.Command{
 					Name: "grep",
 					Args: []string{"test"},
 				},
@@ -168,13 +170,13 @@ func TestParceTokens(t *testing.T) {
 		{
 			name:   "multiple pipes",
 			tokens: []string{"cat", "file.txt", "|", "grep", "error", "|", "wc", "-l"},
-			expected: &Command{
+			expected: &core.Command{
 				Name: "cat",
 				Args: []string{"file.txt"},
-				PipeTo: &Command{
+				PipeTo: &core.Command{
 					Name: "grep",
 					Args: []string{"error"},
-					PipeTo: &Command{
+					PipeTo: &core.Command{
 						Name: "wc",
 						Args: []string{"-l"},
 					},
@@ -186,9 +188,9 @@ func TestParceTokens(t *testing.T) {
 		{
 			name:   "AND operator",
 			tokens: []string{"make", "&&", "./app"},
-			expected: &Command{
+			expected: &core.Command{
 				Name: "make",
-				AndNext: &Command{
+				AndNext: &core.Command{
 					Name: "./app",
 				},
 			},
@@ -196,10 +198,10 @@ func TestParceTokens(t *testing.T) {
 		{
 			name:   "OR operator",
 			tokens: []string{"test", "-f", "file", "||", "touch", "file"},
-			expected: &Command{
+			expected: &core.Command{
 				Name: "test",
 				Args: []string{"-f", "file"},
-				OrNext: &Command{
+				OrNext: &core.Command{
 					Name: "touch",
 					Args: []string{"file"},
 				},
@@ -210,12 +212,12 @@ func TestParceTokens(t *testing.T) {
 		{
 			name:   "pipe with AND",
 			tokens: []string{"ls", "|", "grep", "txt", "&&", "wc", "-l"},
-			expected: &Command{
+			expected: &core.Command{
 				Name: "ls",
-				PipeTo: &Command{
+				PipeTo: &core.Command{
 					Name: "grep",
 					Args: []string{"txt"},
-					AndNext: &Command{
+					AndNext: &core.Command{
 						Name: "wc",
 						Args: []string{"-l"},
 					},
@@ -225,13 +227,13 @@ func TestParceTokens(t *testing.T) {
 		{
 			name:   "complex redirects",
 			tokens: []string{"program", ">", "out.txt", ">>", "err.txt", "|", "logger"},
-			expected: &Command{
+			expected: &core.Command{
 				Name: "program",
-				Redirects: []Redirect{
+				Redirects: []core.Redirect{
 					{Type: ">", File: "out.txt"},
 					{Type: ">>", File: "err.txt"},
 				},
-				PipeTo: &Command{
+				PipeTo: &core.Command{
 					Name: "logger",
 				},
 			},
@@ -275,7 +277,7 @@ func TestParceTokens(t *testing.T) {
 }
 
 // Вспомогательные функции для сравнения команд
-func compareCommands(a, b *Command) bool {
+func compareCommands(a, b *core.Command) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
@@ -300,7 +302,7 @@ func compareCommands(a, b *Command) bool {
 	return true
 }
 
-func compareRedirects(a, b []Redirect) bool {
+func compareRedirects(a, b []core.Redirect) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -312,7 +314,7 @@ func compareRedirects(a, b []Redirect) bool {
 	return true
 }
 
-func commandToString(cmd *Command) string {
+func commandToString(cmd *core.Command) string {
 	if cmd == nil {
 		return "<nil>"
 	}

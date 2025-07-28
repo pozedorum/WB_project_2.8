@@ -1,7 +1,6 @@
 package core
 
 import (
-	"io"
 	"os"
 )
 
@@ -14,11 +13,11 @@ type Environment interface {
 	Setenv(key, value string) error // Установить переменную
 	Environ() []string              // Получить все переменные окружения
 
-	// Редиректы и потоки
-	OpenFile(name string, flag int, perm os.FileMode) (*os.File, error)
-	Stdin() io.Reader
-	Stdout() io.Writer
-	Stderr() io.Writer
+	// // Редиректы и потоки
+	// OpenFile(name string, flag int, perm os.FileMode) (*os.File, error)
+	// Stdin() io.Reader
+	// Stdout() io.Writer
+	// Stderr() io.Writer
 }
 
 // DefaultEnvironment - реализация Environment по умолчанию

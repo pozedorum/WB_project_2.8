@@ -16,6 +16,6 @@ func (echu EchoUtil) Name() string {
 	return "echo"
 }
 
-func (echu *EchoUtil) Execute(args []string, env core.Environment, w io.Writer) error {
+func (echu *EchoUtil) Execute(args []string, env core.Environment, stdin io.Reader, stdout io.Writer) error {
 	return nil
 }

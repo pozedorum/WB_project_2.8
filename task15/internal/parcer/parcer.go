@@ -1,8 +1,12 @@
 package parcer
 
+import (
+	"task15/internal/core"
+)
+
 // TODO: Добавить обработку FD редиректов (2>&1)
 
-func ParceLine(str string) (*Command, error) {
+func ParceLine(str string) (*core.Command, error) {
 	tokens, err := tokenizeString(str)
 	if err != nil {
 		return nil, err
@@ -14,7 +18,7 @@ func ParceLine(str string) (*Command, error) {
 	return cmd, nil
 }
 
-func parceTokens(tokens []string) (*Command, error) {
+func parceTokens(tokens []string) (*core.Command, error) {
 	tokensCount := len(tokens)
 
 	if tokensCount == 0 {
@@ -22,13 +26,13 @@ func parceTokens(tokens []string) (*Command, error) {
 	}
 
 	var (
-		prev    *Command
-		cmd     *Command
-		current *Command
+		prev    *core.Command
+		cmd     *core.Command
+		current *core.Command
 	)
 	ind := 0
 	for ind < tokensCount {
-		current = &Command{}
+		current = &core.Command{}
 
 		for ind < tokensCount && !isControlOperator(tokens[ind]) {
 			if isRedirectOperator(tokens[ind]) {
@@ -36,7 +40,7 @@ func parceTokens(tokens []string) (*Command, error) {
 					return nil, ErrNoFileForRedirect
 				}
 
-				comRedirect := Redirect{
+				comRedirect := core.Redirect{
 					Type: tokens[ind],
 					File: tokens[ind+1],
 				}
@@ -67,10 +71,10 @@ func parceTokens(tokens []string) (*Command, error) {
 			return nil, ErrEmptyCommand
 		}
 		switch tokens[ind] {
-		case Pipe:
+		case core.Pipe:
 			ind++
 
-		case And, Or:
+		case core.And, core.Or:
 			operator := tokens[ind]
 			ind++
 
@@ -85,7 +89,7 @@ func parceTokens(tokens []string) (*Command, error) {
 			if err != nil {
 				return nil, err
 			}
-			if operator == And {
+			if operator == core.And {
 				current.AndNext = nextCommand
 			} else {
 				current.OrNext = nextCommand
@@ -100,21 +104,12 @@ func parceTokens(tokens []string) (*Command, error) {
 	return cmd, nil
 }
 
-func (c *Command) IsEmpty() bool {
-	return c.Name == "" &&
-		len(c.Args) == 0 &&
-		len(c.Redirects) == 0 &&
-		c.PipeTo == nil &&
-		c.AndNext == nil &&
-		c.OrNext == nil
-}
-
 func isControlOperator(token string) bool {
-	_, ok := controlOperators[token]
+	_, ok := core.ControlOperators[token]
 	return ok
 }
 
 func isRedirectOperator(token string) bool {
-	_, ok := redirectOperators[token]
+	_, ok := core.RedirectOperators[token]
 	return ok
 }

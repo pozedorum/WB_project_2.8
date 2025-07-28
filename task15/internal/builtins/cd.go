@@ -16,6 +16,6 @@ func (cdu CdUtil) Name() string {
 	return "cd"
 }
 
-func (cdu *CdUtil) Execute(args []string, env core.Environment, w io.Writer) error {
+func (cdu *CdUtil) Execute(args []string, env core.Environment, stdin io.Reader, stdout io.Writer) error {
 	return nil
 }

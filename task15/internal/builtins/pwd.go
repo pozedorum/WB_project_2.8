@@ -16,6 +16,6 @@ func (pwdu PwdUtil) Name() string {
 	return "pwd"
 }
 
-func (pwdu *PwdUtil) Execute(args []string, env core.Environment, w io.Writer) error {
+func (pwdu *PwdUtil) Execute(args []string, env core.Environment, stdin io.Reader, stdout io.Writer) error {
 	return nil
 }
