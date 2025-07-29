@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"os"
 )
 
@@ -13,11 +14,7 @@ type Environment interface {
 	Setenv(key, value string) error // Установить переменную
 	Environ() []string              // Получить все переменные окружения
 
-	// // Редиректы и потоки
-	// OpenFile(name string, flag int, perm os.FileMode) (*os.File, error)
-	// Stdin() io.Reader
-	// Stdout() io.Writer
-	// Stderr() io.Writer
+	GetHomeDir() (string, error)
 }
 
 // DefaultEnvironment - реализация Environment по умолчанию
@@ -29,6 +26,14 @@ func (e *DefaultEnvironment) Getwd() (string, error) {
 
 func (e *DefaultEnvironment) Chdir(dir string) error {
 	return os.Chdir(dir)
+}
+
+func (e *DefaultEnvironment) GetHomeDir() (string, error) {
+	home := os.Getenv("HOME")
+	if home == "" {
+		return "", errors.New("HOME environment variable not set")
+	}
+	return home, nil
 }
 
 func (e *DefaultEnvironment) Getenv(key string) string {

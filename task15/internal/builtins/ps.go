@@ -2,6 +2,8 @@ package builtins
 
 import (
 	"io"
+	"os"
+	"os/exec"
 
 	"task15/internal/core"
 )
@@ -17,5 +19,8 @@ func (psu PsUtil) Name() string {
 }
 
 func (psu *PsUtil) Execute(args []string, env core.Environment, stdin io.Reader, stdout io.Writer) error {
-	return nil
+	cmd := exec.Command("ps", args...)
+	cmd.Stdout = stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }

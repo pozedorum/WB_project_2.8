@@ -2,6 +2,7 @@ package builtins
 
 import (
 	"io"
+	"strings"
 
 	"task15/internal/core"
 )
@@ -16,6 +17,7 @@ func (echu EchoUtil) Name() string {
 	return "echo"
 }
 
-func (echu *EchoUtil) Execute(args []string, env core.Environment, stdin io.Reader, stdout io.Writer) error {
-	return nil
+func (echu *EchoUtil) Execute(args []string, _ core.Environment, _ io.Reader, stdout io.Writer) error {
+	_, err := stdout.Write([]byte(strings.Join(args, "")))
+	return err
 }
