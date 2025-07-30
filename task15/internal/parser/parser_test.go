@@ -1,4 +1,4 @@
-package parcer
+package parser
 
 import (
 	"fmt"
@@ -127,7 +127,7 @@ func compareStringSlices(a, b []string) bool {
 	return true
 }
 
-func TestParceTokens(t *testing.T) {
+func TestParseTokens(t *testing.T) {
 	tests := []struct {
 		name     string
 		tokens   []string
@@ -264,13 +264,13 @@ func TestParceTokens(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parceTokens(tt.tokens)
+			got, err := parseTokens(tt.tokens)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("parceTokens() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("parseTokens() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !compareCommands(got, tt.expected) {
-				t.Errorf("parceTokens() = %v, want %v", commandToString(got), commandToString(tt.expected))
+				t.Errorf("parseTokens() = %v, want %v", commandToString(got), commandToString(tt.expected))
 			}
 		})
 	}

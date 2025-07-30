@@ -22,12 +22,15 @@ func (cdu *CdUtil) Execute(args []string, env core.Environment, _ io.Reader, _ i
 	case 0:
 		home, err := env.GetHomeDir()
 		if err != nil {
-			return err
+			return fmt.Errorf("cd: %v", err)
 		}
 		return env.Chdir(home)
 	case 1:
-		return env.Chdir(args[0])
+		if err := env.Chdir(args[0]); err != nil {
+			return fmt.Errorf("cd: %v", err)
+		}
+		return nil
 	default:
-		return fmt.Errorf("cd: string not in pwd: %s", args[0])
+		return fmt.Errorf("cd: too many arguments")
 	}
 }

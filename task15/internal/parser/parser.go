@@ -1,4 +1,4 @@
-package parcer
+package parser
 
 import (
 	"task15/internal/core"
@@ -6,19 +6,19 @@ import (
 
 // TODO: Добавить обработку FD редиректов (2>&1)
 
-func ParceLine(str string) (*core.Command, error) {
+func ParseLine(str string) (*core.Command, error) {
 	tokens, err := tokenizeString(str)
 	if err != nil {
 		return nil, err
 	}
-	cmd, err := parceTokens(tokens)
+	cmd, err := parseTokens(tokens)
 	if err != nil {
 		return nil, err
 	}
 	return cmd, nil
 }
 
-func parceTokens(tokens []string) (*core.Command, error) {
+func parseTokens(tokens []string) (*core.Command, error) {
 	tokensCount := len(tokens)
 
 	if tokensCount == 0 {
@@ -85,7 +85,7 @@ func parceTokens(tokens []string) (*core.Command, error) {
 			if current.AndNext != nil || current.OrNext != nil {
 				return nil, ErrMultipleOperators
 			}
-			nextCommand, err := parceTokens(tokens[ind:])
+			nextCommand, err := parseTokens(tokens[ind:])
 			if err != nil {
 				return nil, err
 			}

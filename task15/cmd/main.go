@@ -1,5 +1,8 @@
 package main
 
+import "task15/internal/shell"
+
 func main() {
-	// shell.RunShell()
+	mainShell := shell.NewShell()
+	mainShell.Run()
 }

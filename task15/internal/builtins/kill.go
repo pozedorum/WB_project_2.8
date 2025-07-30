@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"syscall"
 
@@ -27,7 +28,7 @@ func (kilu *KillUtil) Execute(args []string, env core.Environment, stdin io.Read
 
 	var (
 		pid int
-		sig syscall.Signal = syscall.SIGTERM
+		sig = syscall.SIGTERM
 		err error
 	)
 
@@ -35,9 +36,29 @@ func (kilu *KillUtil) Execute(args []string, env core.Environment, stdin io.Read
 		if len(args) < 3 {
 			return errors.New("missing signal or pid")
 		}
-
+		sig, err = parseSignal(args[1])
+		if err != nil {
+			return err
+		}
+		pid, err = strconv.Atoi(args[2])
+	} else {
+		pid, err = strconv.Atoi(args[0])
 	}
 
+	if err != nil && pid <= 0 {
+		return errors.New("invalid PID")
+	}
+
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("process %d not found", pid)
+	}
+
+	if err := process.Signal(sig); err != nil {
+		return fmt.Errorf("failed to kill %d: %v", pid, err)
+	}
+
+	fmt.Fprintf(stdout, "Sent signal %s to process %d\n", sig, pid)
 	return nil
 }
 

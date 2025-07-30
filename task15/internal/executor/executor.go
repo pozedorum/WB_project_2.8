@@ -1,10 +1,13 @@
 package executor
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"sync"
 
 	"task15/internal/builtins"
 	"task15/internal/core"
@@ -13,14 +16,16 @@ import (
 var testMode = false
 
 type Executor struct {
-	builtins  *builtins.Registry
-	env       core.Environment
-	processes []core.ProcessInfo // Для управления
-	stdin     io.Reader
-	stdout    io.Writer
-	stderr    io.Writer
+	builtins *builtins.Registry
+	env      core.Environment
+	stdin    io.Reader
+	stdout   io.Writer
+	stderr   io.Writer
 
 	closers []io.Closer
+
+	procMutex   sync.Mutex
+	currentProc *os.Process
 }
 
 // NewExecutor — Базовый конструктор
@@ -31,16 +36,15 @@ func NewExecutor(
 	stdout io.Writer,
 ) *Executor {
 	return &Executor{
-		builtins:  builtins,
-		env:       env,
-		processes: make([]core.ProcessInfo, 0),
-		stdin:     stdin,
-		stdout:    stdout,
-		stderr:    os.Stderr,
+		builtins: builtins,
+		env:      env,
+		stdin:    stdin,
+		stdout:   stdout,
+		stderr:   os.Stderr,
 	}
 }
 
-// NewDefaultExecutor — Упрощённый конструктор (для большинства случаев)
+// NewDefaultExecutor — Упрощённый конструктор
 func NewDefaultExecutor() *Executor {
 	return NewExecutor(
 		builtins.NewRegistryWithDefaults(),
@@ -50,136 +54,139 @@ func NewDefaultExecutor() *Executor {
 	)
 }
 
-func (e *Executor) Execute(cmd *core.Command) error {
+func (e *Executor) Execute(ctx context.Context, cmd *core.Command) error {
+	if cmd == nil {
+		return errors.New("error: No command")
+	}
 	// Установка редиректов
-	if err := e.setupRedirects(cmd); err != nil {
+	if err := e.setupRedirects(ctx, cmd); err != nil {
 		return err
 	}
 
 	// Обработка pipe/условий
 	if cmd.PipeTo != nil {
-		return e.runPipeline(cmd)
+		return e.runPipeline(ctx, cmd)
 	}
 
-	// 2. Запуск процесса
-
-	return e.runCommand(cmd)
+	return e.runCommand(ctx, cmd)
 }
 
-func (e *Executor) setupRedirects(cmd *core.Command) error {
+func (e *Executor) setupRedirects(ctx context.Context, cmd *core.Command) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	e.Close()
 	e.stdin, e.stdout = os.Stdin, os.Stdout
 
 	for _, redirect := range cmd.Redirects {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		switch redirect.Type {
 		case "<":
 			file, err := os.Open(redirect.File)
 			if err != nil {
 				return fmt.Errorf("error: cannot open input file: %w", err)
 			}
-			defer file.Close()
+			e.closers = append(e.closers, file)
 			e.stdin = file
 		case ">":
 			file, err := os.OpenFile(redirect.File, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 			if err != nil {
 				return fmt.Errorf("error: cannot open output file: %w", err)
 			}
-			defer file.Close()
+			e.closers = append(e.closers, file)
 			e.stdout = file
 		default:
-			return fmt.Errorf("error: this type of rederect is not processing: %s", redirect.Type)
+			return fmt.Errorf("error: this type of redirect is not supported: %s", redirect.Type)
 		}
 	}
 	return nil
 }
 
-func (e *Executor) runPipeline(cmd *core.Command) error {
-	// Создать pipe, запустить команды цепочкой
-
-	pipeReader, pipeWriter, err := os.Pipe()
+func (e *Executor) runPipeline(ctx context.Context, cmd *core.Command) error {
+	pr, pw, err := os.Pipe()
 	if err != nil {
-		return fmt.Errorf("error: cannot create a pipe: %w", err)
+		return err
 	}
-
-	e.closers = append(e.closers, pipeReader)
-
-	originalStdout := e.stdout
-
-	// Если stdout не перенаправлен в файл - используем pipe
-	outputRedirected := false
-	for _, r := range cmd.Redirects {
-		if r.Type == ">" || r.Type == ">>" {
-			outputRedirected = true
-			break
-		}
-	}
-
-	if !outputRedirected {
-		e.stdout = pipeWriter // Перенаправляем вывод в pipe
-	} else {
-		pipeWriter.Close()
-	}
-
+	defer pr.Close()
+	// Первая команда пишет в пайп
+	firstExec := NewExecutor(e.builtins, e.env, e.stdin, pw)
 	errCh := make(chan error, 1)
+
 	go func() {
-		defer pipeWriter.Close()
-
-		nextExecutor := NewExecutor(e.builtins, e.env, pipeReader, originalStdout)
-
-		errCh <- nextExecutor.Execute(cmd.PipeTo) // передаём ошибку в канал
+		defer pw.Close()
+		errCh <- firstExec.runCommand(ctx, cmd)
 	}()
 
-	// Запускаем текущую команду
-	cmdErr := e.runCommand(cmd)
+	// Вторая команда читает из пайпа
+	secondExec := NewExecutor(e.builtins, e.env, pr, e.stdout)
+	err = secondExec.runCommand(ctx, cmd.PipeTo)
 
-	// Ждём завершения следующей команды
-	pipelineErr := <-errCh
-
-	// Приоритет ошибки текущей команды
-	if cmdErr != nil {
-		return fmt.Errorf("pipeline stage failed: %w", cmdErr)
-	}
-	if pipelineErr != nil {
-		return fmt.Errorf("pipeline command failed: %w", pipelineErr)
+	// Дожидаемся завершения первой команды
+	if firstErr := <-errCh; firstErr != nil {
+		return firstErr
 	}
 
-	return nil
+	return err
 }
 
-func (e *Executor) runCommand(cmd *core.Command) error {
-	defer e.Close()
+func (e *Executor) runCommand(ctx context.Context, cmd *core.Command) error {
+	//log.Printf("runCommand: %s %v\n", cmd.Name, cmd.Args)
+	//log.Printf("  stdin: %T, stdout: %T\n", e.stdin, e.stdout)
 
-	if bCom, ok := e.builtins.GetCommand(cmd.Name); ok {
-		return bCom.Execute(cmd.Args, e.env, e.stdin, e.stdout)
+	// Для встроенных команд
+	if bCmd, ok := e.builtins.GetCommand(cmd.Name); ok {
+		//log.Println("Executing builtin command")
+		return bCmd.Execute(cmd.Args, e.env, e.stdin, e.stdout)
 	}
 
+	// Проверка доступности команды
 	if !testMode {
+		//log.Println("Checking command availability...")
 		if _, err := exec.LookPath(cmd.Name); err != nil {
-			return fmt.Errorf("command %s not found", cmd.Name)
+			//log.Printf("Command not found: %v\n", err)
+			return fmt.Errorf("command not found: %w", err)
 		}
 	}
 
-	proc := exec.Command(cmd.Name, cmd.Args...)
+	proc := exec.CommandContext(ctx, cmd.Name, cmd.Args...)
 	proc.Stdin = e.stdin
 	proc.Stdout = e.stdout
 	proc.Stderr = e.stderr
-	proc.Env = append(os.Environ(), e.env.Environ()...)
 
+	//log.Println("Starting external command...")
 	if err := proc.Start(); err != nil {
-		return fmt.Errorf("failed to start a proc %s: %w", cmd.Name, err)
+		//log.Printf("Command start failed: %v\n", err)
+		return fmt.Errorf("start failed: %w", err)
 	}
 
-	e.processes = append(e.processes, core.ProcessInfo{
-		Pid:     proc.Process.Pid,
-		Command: cmd,
-	})
-
-	return proc.Wait()
+	//log.Println("Waiting for command to complete...")
+	err := proc.Wait()
+	//log.Printf("Command completed with error: %v\n", err)
+	return err
 }
 
-func (e *Executor) Close() {
+func (e *Executor) Interrupt() {
+	e.procMutex.Lock()
+	defer e.procMutex.Unlock()
+
+	if e.currentProc != nil {
+		e.currentProc.Signal(os.Interrupt)
+	}
+}
+
+func (e *Executor) Close() error {
+	e.procMutex.Lock()
+	defer e.procMutex.Unlock()
+
 	for _, closer := range e.closers {
-		closer.Close()
+		if err := closer.Close(); err != nil {
+			return err
+		}
 	}
 	e.closers = nil
+	return nil
 }

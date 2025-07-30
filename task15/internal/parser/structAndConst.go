@@ -1,4 +1,4 @@
-package parcer
+package parser
 
 import "errors"
 
