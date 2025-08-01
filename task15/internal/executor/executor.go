@@ -13,8 +13,6 @@ import (
 	"task15/internal/core"
 )
 
-var testMode = false
-
 type Executor struct {
 	builtins *builtins.Registry
 	env      core.Environment
@@ -28,7 +26,6 @@ type Executor struct {
 	currentProc *os.Process
 }
 
-// NewExecutor — Базовый конструктор
 func NewExecutor(
 	builtins *builtins.Registry,
 	env core.Environment,
@@ -44,7 +41,6 @@ func NewExecutor(
 	}
 }
 
-// NewDefaultExecutor — Упрощённый конструктор
 func NewDefaultExecutor() *Executor {
 	return NewExecutor(
 		builtins.NewRegistryWithDefaults(),
@@ -55,20 +51,32 @@ func NewDefaultExecutor() *Executor {
 }
 
 func (e *Executor) Execute(ctx context.Context, cmd *core.Command) error {
-	if cmd == nil {
+	if cmd == nil || cmd.Name == "" {
 		return errors.New("error: No command")
 	}
+	var err error
 	// Установка редиректов
-	if err := e.setupRedirects(ctx, cmd); err != nil {
+	if err = e.setupRedirects(ctx, cmd); err != nil {
 		return err
 	}
 
-	// Обработка pipe/условий
-	if cmd.PipeTo != nil {
-		return e.runPipeline(ctx, cmd)
+	// Обработка команд с управляющими символами
+	switch {
+	case cmd.PipeTo != nil:
+		return e.handlePipe(ctx, cmd)
+	case cmd.AndNext != nil:
+		if err = e.runCommand(ctx, cmd); err == nil { // Только если первая команда успешна
+			return e.Execute(ctx, cmd.AndNext)
+		}
+		return err
+	case cmd.OrNext != nil:
+		if err := e.runCommand(ctx, cmd); err != nil { // Только если первая команда неуспешна
+			return e.Execute(ctx, cmd.OrNext)
+		}
+		return nil
+	default:
+		return e.runCommand(ctx, cmd)
 	}
-
-	return e.runCommand(ctx, cmd)
 }
 
 func (e *Executor) setupRedirects(ctx context.Context, cmd *core.Command) error {
@@ -92,6 +100,7 @@ func (e *Executor) setupRedirects(ctx context.Context, cmd *core.Command) error 
 			}
 			e.closers = append(e.closers, file)
 			e.stdin = file
+
 		case ">":
 			file, err := os.OpenFile(redirect.File, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 			if err != nil {
@@ -100,72 +109,56 @@ func (e *Executor) setupRedirects(ctx context.Context, cmd *core.Command) error 
 			e.closers = append(e.closers, file)
 			e.stdout = file
 		default:
-			return fmt.Errorf("error: this type of redirect is not supported: %s", redirect.Type)
+			return fmt.Errorf("error: unsupported redirect type: %s", redirect.Type)
 		}
 	}
 	return nil
 }
 
-func (e *Executor) runPipeline(ctx context.Context, cmd *core.Command) error {
+func (e *Executor) handlePipe(ctx context.Context, cmd *core.Command) error {
 	pr, pw, err := os.Pipe()
 	if err != nil {
 		return fmt.Errorf("pipe error: %w", err)
 	}
 
-	// Каналы для синхронизации
-	firstErrCh := make(chan error, 1)
-	secondErrCh := make(chan error, 1)
-	done := make(chan struct{})
+	errCh := make(chan error, 2)
 
-	// Горутина для первой команды (пишет в пайп)
+	// Левый процесс (пишет в пайп)
 	go func() {
-		defer close(done)
-		defer pw.Close()
-
-		select {
-		case <-ctx.Done():
-			firstErrCh <- ctx.Err()
-			return
-		default:
-		}
-
+		defer pw.Close() // Важно: закрываем pipe-writer после завершения команды
 		tempExec := NewExecutor(e.builtins, e.env, e.stdin, pw)
-		firstErrCh <- tempExec.runCommand(ctx, cmd)
+		errCh <- tempExec.runCommand(ctx, cmd)
 	}()
 
-	// Горутина для второй команды (читает из пайпа)
+	// Правый процесс (читает из пайпа)
 	go func() {
-		defer pr.Close()
-
-		select {
-		case <-ctx.Done():
-			secondErrCh <- ctx.Err()
-			return
-		case <-done:
-		}
-
+		defer pr.Close() // Закрываем pipe-reader
 		tempExec := NewExecutor(e.builtins, e.env, pr, e.stdout)
-		secondErrCh <- tempExec.runCommand(ctx, cmd.PipeTo)
+		errCh <- tempExec.runCommand(ctx, cmd.PipeTo)
 	}()
 
-	// Ожидаем завершения обеих команд
-	firstErr := <-firstErrCh
-	secondErr := <-secondErrCh
+	// Ожидаем завершения
+	var firstErr, secondErr error
+	for i := 0; i < 2; i++ {
+		if err := <-errCh; err != nil && firstErr == nil {
+			firstErr = err
+		} else if err != nil {
+			secondErr = err
+		}
+	}
 
 	if firstErr != nil {
-		return fmt.Errorf("first command failed: %w", firstErr)
+		return fmt.Errorf("pipe command failed: %w", firstErr)
 	}
 	if secondErr != nil {
-		return fmt.Errorf("second command failed: %w", secondErr)
+		return fmt.Errorf("pipe command failed: %w", secondErr)
 	}
-
 	return nil
 }
 
 func (e *Executor) runCommand(ctx context.Context, cmd *core.Command) error {
-	// Специальная обработка для grep
-	if cmd.Name == "grep" {
-		return e.runGrepCommand(ctx, cmd)
+	if cmd.IsEmpty() {
+		return nil
 	}
 
 	// Для встроенных команд
@@ -199,79 +192,23 @@ func (e *Executor) runCommand(ctx context.Context, cmd *core.Command) error {
 		e.procMutex.Unlock()
 	}()
 
-	return proc.Wait()
+	err := proc.Wait()
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		// Для внешних команд возвращаем ошибку с кодом возврата
+		return fmt.Errorf("exit status %d", exitErr.ExitCode())
+	}
+
+	return err
 }
 
-/*
-	func (e *Executor) runPipeline(ctx context.Context, cmd *core.Command) error {
-		pr, pw, err := os.Pipe()
-		if err != nil {
-			return err
-		}
-		defer pr.Close()
-		// Первая команда пишет в пайп
-		firstExec := NewExecutor(e.builtins, e.env, e.stdin, pw)
-		errCh := make(chan error, 1)
-
-		go func() {
-			defer pw.Close()
-			errCh <- firstExec.runCommand(ctx, cmd)
-		}()
-
-		// Вторая команда читает из пайпа
-		secondExec := NewExecutor(e.builtins, e.env, pr, e.stdout)
-		err = secondExec.runCommand(ctx, cmd.PipeTo)
-
-		// Дожидаемся завершения первой команды
-		if firstErr := <-errCh; firstErr != nil {
-			return firstErr
-		}
-
-		return err
-	}
-
-	func (e *Executor) runCommand(ctx context.Context, cmd *core.Command) error {
-		//log.Printf("runCommand: %s %v\n", cmd.Name, cmd.Args)
-		//log.Printf("  stdin: %T, stdout: %T\n", e.stdin, e.stdout)
-
-		// Для встроенных команд
-		if bCmd, ok := e.builtins.GetCommand(cmd.Name); ok {
-			//log.Println("Executing builtin command")
-			return bCmd.Execute(cmd.Args, e.env, e.stdin, e.stdout)
-		}
-
-		// Проверка доступности команды
-		if !testMode {
-			//log.Println("Checking command availability...")
-			if _, err := exec.LookPath(cmd.Name); err != nil {
-				//log.Printf("Command not found: %v\n", err)
-				return fmt.Errorf("command not found: %w", err)
-			}
-		}
-
-		proc := exec.CommandContext(ctx, cmd.Name, cmd.Args...)
-		proc.Stdin = e.stdin
-		proc.Stdout = e.stdout
-		proc.Stderr = e.stderr
-
-		//log.Println("Starting external command...")
-		if err := proc.Start(); err != nil {
-			//log.Printf("Command start failed: %v\n", err)
-			return fmt.Errorf("start failed: %w", err)
-		}
-
-		//log.Println("Waiting for command to complete...")
-		err := proc.Wait()
-		//log.Printf("Command completed with error: %v\n", err)
-		return err
-	}
-*/
 func (e *Executor) Interrupt() {
 	e.procMutex.Lock()
 	defer e.procMutex.Unlock()
 
 	if e.currentProc != nil {
-		e.currentProc.Signal(os.Interrupt)
+		if err := e.currentProc.Signal(os.Interrupt); err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -279,49 +216,16 @@ func (e *Executor) Close() error {
 	e.procMutex.Lock()
 	defer e.procMutex.Unlock()
 
+	var errs []error
 	for _, closer := range e.closers {
 		if err := closer.Close(); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
 	e.closers = nil
+
+	if len(errs) > 0 {
+		return fmt.Errorf("errors while closing: %v", errs)
+	}
 	return nil
-}
-
-func (e *Executor) runGrepCommand(ctx context.Context, cmd *core.Command) error {
-	// Стандартные флаги grep из терминала
-	args := []string{
-		"--color=never",
-		"--exclude-dir=.bzr",
-		"--exclude-dir=CVS",
-		"--exclude-dir=.git",
-		"--exclude-dir=.hg",
-		"--exclude-dir=.svn",
-		"--exclude-dir=.idea",
-		"--exclude-dir=.tox",
-		"--exclude-dir=.venv",
-	}
-	args = append(args, cmd.Args...)
-
-	proc := exec.CommandContext(ctx, "grep", args...)
-	proc.Stdin = e.stdin
-	proc.Stdout = e.stdout
-	proc.Stderr = e.stderr
-
-	// Сохраняем процесс для возможного прерывания
-	e.procMutex.Lock()
-	if err := proc.Start(); err != nil {
-		e.procMutex.Unlock()
-		return fmt.Errorf("grep start failed: %w", err)
-	}
-	e.currentProc = proc.Process
-	e.procMutex.Unlock()
-
-	defer func() {
-		e.procMutex.Lock()
-		e.currentProc = nil
-		e.procMutex.Unlock()
-	}()
-
-	return proc.Wait()
 }

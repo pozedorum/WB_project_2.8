@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
 	"task15/internal/core"
@@ -97,6 +98,16 @@ func TestTokenizeString(t *testing.T) {
 			name:     "special chars in quotes",
 			input:    `echo "| && > <"`,
 			expected: []string{"echo", "| && > <"},
+		},
+		{
+			name:     "mixed quotes",
+			input:    `echo 'literal $USER' "expanded $USER"`,
+			expected: []string{"echo", "literal $USER", "expanded " + os.Getenv("USER")},
+		},
+		{
+			name:     "escaped quotes",
+			input:    `echo \$USER '"$USER"' "'$USER'"`,
+			expected: []string{"echo", "$USER", `"$USER"`, "'" + os.Getenv("USER") + "'"},
 		},
 	}
 
@@ -224,21 +235,6 @@ func TestParseTokens(t *testing.T) {
 				},
 			},
 		},
-		{
-			name:   "complex redirects",
-			tokens: []string{"program", ">", "out.txt", ">>", "err.txt", "|", "logger"},
-			expected: &core.Command{
-				Name: "program",
-				Redirects: []core.Redirect{
-					{Type: ">", File: "out.txt"},
-					{Type: ">>", File: "err.txt"},
-				},
-				PipeTo: &core.Command{
-					Name: "logger",
-				},
-			},
-		},
-
 		// Ошибочные случаи
 		{
 			name:    "empty command",

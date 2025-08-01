@@ -25,7 +25,7 @@ lint:
 
 # Очистка
 clean:
-	rm -rf GShell coverage.out
+	rm -rf GShell coverage.out *.txt
 
 # Запуск (после сборки)
 run: build

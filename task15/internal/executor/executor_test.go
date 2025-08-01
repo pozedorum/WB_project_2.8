@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"task15/internal/builtins"
 	"task15/internal/core"
 )
 
@@ -27,7 +26,10 @@ func captureOutput(f func()) string {
 	w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	if _, err := io.Copy(&buf, r); err != nil {
+		panic(err)
+	}
+
 	return buf.String()
 }
 
@@ -54,8 +56,12 @@ func TestEchoCommand(t *testing.T) {
 func TestCdCommand(t *testing.T) {
 	ctx := context.Background()
 	originalDir, _ := os.Getwd()
-	defer os.Chdir(originalDir)
+	defer func() {
+		if err := os.Chdir(originalDir); err != nil {
+			panic(err)
+		}
 
+	}()
 	testDir, err := os.MkdirTemp("", "testcd")
 	if err != nil {
 		t.Fatal(err)
@@ -124,8 +130,11 @@ func TestKillCommand(t *testing.T) {
 	if err := testCmd.Start(); err != nil {
 		t.Skipf("Cannot start test process: %v", err)
 	}
-	defer testCmd.Process.Kill()
-
+	defer func() {
+		if err := testCmd.Process.Kill(); err != nil {
+			panic(err)
+		}
+	}()
 	output := captureOutput(func() {
 		cmd := &core.Command{
 			Name: "kill",
@@ -153,59 +162,69 @@ func TestExecutorClosesResources(t *testing.T) {
 	// Добавляем файл в closers
 	e.closers = append(e.closers, tmpFile)
 
-	if err = e.Close(); err != nil {
-		t.Errorf("Close() failed: %v", err)
-	}
+	output := captureOutput(func() {
+		if err = e.Close(); err != nil {
+			t.Errorf("Close() failed: %v", err)
+		}
+	})
 
 	// Проверяем что файл действительно закрыт
 	_, err = tmpFile.Write([]byte("test"))
 	if err == nil {
 		t.Error("File should be closed after executor cleanup")
 	}
+	if output != "" {
+		t.Errorf("Expected no output from Close(), got %q", output)
+	}
 }
 
 func TestCommandWithTimeout(t *testing.T) {
-
 	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Millisecond)
 	defer cancel()
 
-	e := NewExecutor(builtins.NewRegistryWithDefaults(), &core.DefaultEnvironment{}, os.Stdin, os.Stdout)
+	e := NewDefaultExecutor()
 
-	// Используем команду, которая точно не завершится мгновенно
-	cmd := &core.Command{
-		Name: "sleep",
-		Args: []string{"5"},
-	}
-
-	start := time.Now()
-	err := e.Execute(ctx, cmd)
-	duration := time.Since(start)
-
-	if err == nil {
-		t.Fatal("Expected error, got nil")
-	}
-
-	// Проверяем, что команда завершилась ДО истечения 5 секунд (значит, прервана)
-	if duration >= 5*time.Second {
-		t.Errorf("Expected command to be interrupted, but it ran for full duration: %v", duration)
-	}
-
-	// Допустимые варианты ошибки:
-	expectedErrors := []string{
-		"context deadline exceeded", // Ожидаемая ошибка контекста
-		"signal: killed",            // Альтернативный вариант (процесс убит по сигналу)
-	}
-
-	found := false
-	for _, expected := range expectedErrors {
-		if strings.Contains(err.Error(), expected) {
-			found = true
-			break
+	output := captureOutput(func() {
+		// Используем команду, которая точно не завершится мгновенно
+		cmd := &core.Command{
+			Name: "sleep",
+			Args: []string{"5"},
 		}
-	}
 
-	if !found {
-		t.Errorf("Expected error to contain one of %v, got: %v", expectedErrors, err)
+		start := time.Now()
+		err := e.Execute(ctx, cmd)
+		duration := time.Since(start)
+
+		if err == nil {
+			t.Fatal("Expected error, got nil")
+		}
+
+		// Проверяем, что команда завершилась ДО истечения 5 секунд (значит, прервана)
+		if duration >= 5*time.Second {
+			t.Errorf("Expected command to be interrupted, but it ran for full duration: %v", duration)
+		}
+
+		// Допустимые варианты ошибки:
+		expectedErrors := []string{
+			"context deadline exceeded", // Ожидаемая ошибка контекста
+			"signal: killed",            // Альтернативный вариант (процесс убит по сигналу)
+		}
+
+		found := false
+		for _, expected := range expectedErrors {
+			if strings.Contains(err.Error(), expected) {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			t.Errorf("Expected error to contain one of %v, got: %v", expectedErrors, err)
+		}
+	})
+
+	if output != "" {
+		t.Errorf("Expected no output for timeout test, got %q", output)
 	}
 }
 
@@ -213,36 +232,50 @@ func TestExecuteWithCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Отменяем контекст сразу
 
-	e := NewExecutor(builtins.NewRegistryWithDefaults(), &core.DefaultEnvironment{}, os.Stdin, os.Stdout)
-	cmd := &core.Command{Name: "sleep", Args: []string{"1"}}
+	e := NewDefaultExecutor()
 
-	err := e.Execute(ctx, cmd)
-	if err == nil {
-		t.Fatal("Expected error for cancelled context, got nil")
-	}
+	output := captureOutput(func() {
+		cmd := &core.Command{Name: "sleep", Args: []string{"1"}}
 
-	if !errors.Is(err, context.Canceled) &&
-		!strings.Contains(err.Error(), "context canceled") {
-		t.Errorf("Expected context canceled error, got: %v", err)
+		err := e.Execute(ctx, cmd)
+		if err == nil {
+			t.Fatal("Expected error for cancelled context, got nil")
+		}
+
+		if !errors.Is(err, context.Canceled) &&
+			!strings.Contains(err.Error(), "context canceled") {
+			t.Errorf("Expected context canceled error, got: %v", err)
+		}
+	})
+
+	if output != "" {
+		t.Errorf("Expected no output for cancelled context test, got %q", output)
 	}
 }
 
 func TestExecuteInvalidCommand(t *testing.T) {
-	e := NewExecutor(builtins.NewRegistryWithDefaults(), &core.DefaultEnvironment{}, os.Stdin, os.Stdout)
-	cmd := &core.Command{Name: "nonexistent_command_123", Args: []string{}}
+	e := NewDefaultExecutor()
 
-	err := e.Execute(context.Background(), cmd)
-	if err == nil {
-		t.Fatal("Expected error for invalid command, got nil")
-	}
+	output := captureOutput(func() {
+		cmd := &core.Command{Name: "nonexistent_command_123", Args: []string{}}
 
-	if !strings.Contains(err.Error(), "not found") {
-		t.Errorf("Expected 'not found' error, got: %v", err)
+		err := e.Execute(context.Background(), cmd)
+		if err == nil {
+			t.Fatal("Expected error for invalid command, got nil")
+		}
+
+		if !strings.Contains(err.Error(), "not found") {
+			t.Errorf("Expected 'not found' error, got: %v", err)
+		}
+	})
+
+	if output != "" {
+		t.Errorf("Expected no output for invalid command test, got %q", output)
 	}
 }
 
 func TestExecuteEmptyCommand(t *testing.T) {
-	e := NewExecutor(builtins.NewRegistryWithDefaults(), &core.DefaultEnvironment{}, os.Stdin, os.Stdout)
+	e := NewDefaultExecutor()
 
 	tests := []struct {
 		name    string
@@ -255,9 +288,15 @@ func TestExecuteEmptyCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := e.Execute(context.Background(), tt.cmd)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Execute() error = %v, wantErr %v", err, tt.wantErr)
+			output := captureOutput(func() {
+				err := e.Execute(context.Background(), tt.cmd)
+				if (err != nil) != tt.wantErr {
+					t.Errorf("Execute() error = %v, wantErr %v", err, tt.wantErr)
+				}
+			})
+
+			if output != "" {
+				t.Errorf("Expected no output for empty command test, got %q", output)
 			}
 		})
 	}
@@ -271,19 +310,25 @@ func TestRedirectOutputToFile(t *testing.T) {
 	tmpFile.Close() // Закрываем, чтобы executor мог переоткрыть
 	defer os.Remove(tmpFile.Name())
 
-	e := NewExecutor(builtins.NewRegistryWithDefaults(), &core.DefaultEnvironment{}, os.Stdin, os.Stdout)
+	e := NewDefaultExecutor()
 
-	cmd := &core.Command{
-		Name: "echo",
-		Args: []string{"hello redirect"},
-		Redirects: []core.Redirect{
-			{Type: ">", File: tmpFile.Name()},
-		},
-	}
+	output := captureOutput(func() {
+		cmd := &core.Command{
+			Name: "echo",
+			Args: []string{"hello redirect"},
+			Redirects: []core.Redirect{
+				{Type: ">", File: tmpFile.Name()},
+			},
+		}
 
-	err = e.Execute(context.Background(), cmd)
-	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
+		err = e.Execute(context.Background(), cmd)
+		if err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		}
+	})
+
+	if output != "" {
+		t.Errorf("Expected no output when redirecting to file, got %q", output)
 	}
 
 	content, err := os.ReadFile(tmpFile.Name())
@@ -311,51 +356,52 @@ func TestRedirectInputFromFile(t *testing.T) {
 	}
 	tmpFile.Close()
 
-	// Буфер для вывода
-	output := &bytes.Buffer{}
-	e := NewExecutor(builtins.NewRegistryWithDefaults(), &core.DefaultEnvironment{}, nil, output)
+	e := NewDefaultExecutor()
 
-	cmd := &core.Command{
-		Name: "cat",
-		Redirects: []core.Redirect{
-			{Type: "<", File: tmpFile.Name()},
-		},
-	}
+	output := captureOutput(func() {
+		cmd := &core.Command{
+			Name: "cat",
+			Redirects: []core.Redirect{
+				{Type: "<", File: tmpFile.Name()},
+			},
+		}
 
-	if err := e.Execute(context.Background(), cmd); err != nil {
-		t.Fatalf("Execute failed: %v", err)
-	}
+		if err := e.Execute(context.Background(), cmd); err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		}
+	})
 
-	if output.String() != "file content" {
-		t.Errorf("Expected %q, got %q", "file content", output.String())
+	if output != "file content" {
+		t.Errorf("Expected %q, got %q", "file content", output)
 	}
 }
 
 func TestPipelineTwoCommands(t *testing.T) {
-	output := &bytes.Buffer{}
-	e := NewExecutor(builtins.NewRegistryWithDefaults(), &core.DefaultEnvironment{}, nil, output)
+	e := NewDefaultExecutor()
 
-	cmd := &core.Command{
-		Name: "echo",
-		Args: []string{"hello pipeline"},
-		PipeTo: &core.Command{
-			Name: "tr",
-			Args: []string{"a-z", "A-Z"},
-		},
-	}
+	output := captureOutput(func() {
+		cmd := &core.Command{
+			Name: "echo",
+			Args: []string{"hello pipeline"},
+			PipeTo: &core.Command{
+				Name: "tr",
+				Args: []string{"a-z", "A-Z"},
+			},
+		}
 
-	if err := e.Execute(context.Background(), cmd); err != nil {
-		t.Fatalf("Execute failed: %v", err)
-	}
+		if err := e.Execute(context.Background(), cmd); err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		}
+	})
 
 	expected := "HELLO PIPELINE\n"
-	if output.String() != expected {
-		t.Errorf("Expected %q, got %q", expected, output.String())
+	if output != expected {
+		t.Errorf("Expected %q, got %q", expected, output)
 	}
 }
 
 func TestRedirectErrors(t *testing.T) {
-	e := NewExecutor(builtins.NewRegistryWithDefaults(), &core.DefaultEnvironment{}, os.Stdin, os.Stdout)
+	e := NewDefaultExecutor()
 
 	tests := []struct {
 		name     string
@@ -375,74 +421,31 @@ func TestRedirectErrors(t *testing.T) {
 		{
 			"Invalid redirect type",
 			core.Redirect{Type: ">>", File: "test.txt"},
-			"not supported", // Обновляем ожидаемую ошибку
+			"error: unsupported redirect type: >>",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := &core.Command{
-				Name:      "echo",
-				Args:      []string{"test"},
-				Redirects: []core.Redirect{tt.redirect},
-			}
+			output := captureOutput(func() {
+				cmd := &core.Command{
+					Name:      "echo",
+					Args:      []string{"test"},
+					Redirects: []core.Redirect{tt.redirect},
+				}
 
-			err := e.Execute(context.Background(), cmd)
-			if err == nil {
-				t.Fatal("Expected error, got nil")
-			}
-			if !strings.Contains(err.Error(), tt.wantErr) {
-				t.Errorf("Expected error containing %q, got %q", tt.wantErr, err.Error())
+				err := e.Execute(context.Background(), cmd)
+				if err == nil {
+					t.Fatal("Expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Errorf("Expected error containing %q, got %q", tt.wantErr, err.Error())
+				}
+			})
+
+			if output != "" {
+				t.Errorf("Expected no output for redirect error test, got %q", output)
 			}
 		})
 	}
 }
-
-// func TestComplexPipelineWithRedirects(t *testing.T) {
-// 	// Проверяем доступность команд
-// 	for _, cmd := range []string{"printf", "grep", "wc"} {
-// 		if _, err := exec.LookPath(cmd); err != nil {
-// 			t.Skipf("Command %q not available: %v", cmd, err)
-// 		}
-// 	}
-// 	// Создаем временный выходной файл
-// 	tmpOut, err := os.CreateTemp("", "test_output_*")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	tmpOut.Close()
-// 	defer os.Remove(tmpOut.Name())
-// 	e := NewExecutor(builtins.NewRegistryWithDefaults(), &core.DefaultEnvironment{}, os.Stdin, os.Stdout)
-// 	// Используем printf вместо echo для корректной обработки переносов строк
-// 	cmd := &core.Command{
-// 		Name: "printf",
-// 		Args: []string{"%s\\n", "apple", "banana", "orange", "pear", "kiwi"},
-// 		PipeTo: &core.Command{
-// 			Name: "grep",
-// 			Args: []string{"-E", "a$"}, // -E для расширенных regexp в BSD grep
-// 			PipeTo: &core.Command{
-// 				Name: "wc",
-// 				Args: []string{"-l"},
-// 				Redirects: []core.Redirect{
-// 					{Type: ">", File: tmpOut.Name()},
-// 				},
-// 			},
-// 		},
-// 	}
-// 	if err := e.Execute(context.Background(), cmd); err != nil {
-// 		t.Fatalf("Pipeline failed: %v", err)
-// 	}
-// 	content, err := os.ReadFile(tmpOut.Name())
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	actual := strings.TrimSpace(string(content))
-// 	expected := "3" // banana, orange, pear
-// 	if actual != expected {
-// 		t.Errorf("Expected wc -l output %q, got %q", expected, actual)
-// 		// Дополнительная диагностика
-// 		diagnostic := exec.Command("sh", "-c", "printf '%s\\n' apple banana orange pear kiwi | grep -E 'a$' | wc -l")
-// 		out, _ := diagnostic.CombinedOutput()
-// 		t.Logf("Diagnostic command output: %q", out)
-// 	}
-// }
