@@ -109,66 +109,163 @@ func (e *Executor) setupRedirects(ctx context.Context, cmd *core.Command) error 
 func (e *Executor) runPipeline(ctx context.Context, cmd *core.Command) error {
 	pr, pw, err := os.Pipe()
 	if err != nil {
-		return err
+		return fmt.Errorf("pipe error: %w", err)
 	}
-	defer pr.Close()
-	// Первая команда пишет в пайп
-	firstExec := NewExecutor(e.builtins, e.env, e.stdin, pw)
-	errCh := make(chan error, 1)
 
+	// Каналы для синхронизации
+	firstErrCh := make(chan error, 1)
+	secondErrCh := make(chan error, 1)
+	done := make(chan struct{})
+
+	// Горутина для первой команды (пишет в пайп)
 	go func() {
+		defer close(done)
 		defer pw.Close()
-		errCh <- firstExec.runCommand(ctx, cmd)
+
+		select {
+		case <-ctx.Done():
+			firstErrCh <- ctx.Err()
+			return
+		default:
+		}
+
+		tempExec := NewExecutor(e.builtins, e.env, e.stdin, pw)
+		firstErrCh <- tempExec.runCommand(ctx, cmd)
 	}()
 
-	// Вторая команда читает из пайпа
-	secondExec := NewExecutor(e.builtins, e.env, pr, e.stdout)
-	err = secondExec.runCommand(ctx, cmd.PipeTo)
+	// Горутина для второй команды (читает из пайпа)
+	go func() {
+		defer pr.Close()
 
-	// Дожидаемся завершения первой команды
-	if firstErr := <-errCh; firstErr != nil {
-		return firstErr
+		select {
+		case <-ctx.Done():
+			secondErrCh <- ctx.Err()
+			return
+		case <-done:
+		}
+
+		tempExec := NewExecutor(e.builtins, e.env, pr, e.stdout)
+		secondErrCh <- tempExec.runCommand(ctx, cmd.PipeTo)
+	}()
+
+	// Ожидаем завершения обеих команд
+	firstErr := <-firstErrCh
+	secondErr := <-secondErrCh
+
+	if firstErr != nil {
+		return fmt.Errorf("first command failed: %w", firstErr)
+	}
+	if secondErr != nil {
+		return fmt.Errorf("second command failed: %w", secondErr)
 	}
 
-	return err
+	return nil
 }
 
 func (e *Executor) runCommand(ctx context.Context, cmd *core.Command) error {
-	//log.Printf("runCommand: %s %v\n", cmd.Name, cmd.Args)
-	//log.Printf("  stdin: %T, stdout: %T\n", e.stdin, e.stdout)
+	// Специальная обработка для grep
+	if cmd.Name == "grep" {
+		return e.runGrepCommand(ctx, cmd)
+	}
 
 	// Для встроенных команд
 	if bCmd, ok := e.builtins.GetCommand(cmd.Name); ok {
-		//log.Println("Executing builtin command")
 		return bCmd.Execute(cmd.Args, e.env, e.stdin, e.stdout)
 	}
 
-	// Проверка доступности команды
-	if !testMode {
-		//log.Println("Checking command availability...")
-		if _, err := exec.LookPath(cmd.Name); err != nil {
-			//log.Printf("Command not found: %v\n", err)
-			return fmt.Errorf("command not found: %w", err)
-		}
-	}
-
+	// Для внешних команд
 	proc := exec.CommandContext(ctx, cmd.Name, cmd.Args...)
 	proc.Stdin = e.stdin
 	proc.Stdout = e.stdout
 	proc.Stderr = e.stderr
 
-	//log.Println("Starting external command...")
-	if err := proc.Start(); err != nil {
-		//log.Printf("Command start failed: %v\n", err)
-		return fmt.Errorf("start failed: %w", err)
+	// Особые флаги для ps в пайплайнах
+	if cmd.Name == "ps" && cmd.PipeTo != nil {
+		proc.Args = append(proc.Args, "-x") // Для macOS
 	}
 
-	//log.Println("Waiting for command to complete...")
-	err := proc.Wait()
-	//log.Printf("Command completed with error: %v\n", err)
-	return err
+	// Сохраняем процесс для прерывания
+	e.procMutex.Lock()
+	if err := proc.Start(); err != nil {
+		e.procMutex.Unlock()
+		return fmt.Errorf("start failed: %w", err)
+	}
+	e.currentProc = proc.Process
+	e.procMutex.Unlock()
+
+	defer func() {
+		e.procMutex.Lock()
+		e.currentProc = nil
+		e.procMutex.Unlock()
+	}()
+
+	return proc.Wait()
 }
 
+/*
+	func (e *Executor) runPipeline(ctx context.Context, cmd *core.Command) error {
+		pr, pw, err := os.Pipe()
+		if err != nil {
+			return err
+		}
+		defer pr.Close()
+		// Первая команда пишет в пайп
+		firstExec := NewExecutor(e.builtins, e.env, e.stdin, pw)
+		errCh := make(chan error, 1)
+
+		go func() {
+			defer pw.Close()
+			errCh <- firstExec.runCommand(ctx, cmd)
+		}()
+
+		// Вторая команда читает из пайпа
+		secondExec := NewExecutor(e.builtins, e.env, pr, e.stdout)
+		err = secondExec.runCommand(ctx, cmd.PipeTo)
+
+		// Дожидаемся завершения первой команды
+		if firstErr := <-errCh; firstErr != nil {
+			return firstErr
+		}
+
+		return err
+	}
+
+	func (e *Executor) runCommand(ctx context.Context, cmd *core.Command) error {
+		//log.Printf("runCommand: %s %v\n", cmd.Name, cmd.Args)
+		//log.Printf("  stdin: %T, stdout: %T\n", e.stdin, e.stdout)
+
+		// Для встроенных команд
+		if bCmd, ok := e.builtins.GetCommand(cmd.Name); ok {
+			//log.Println("Executing builtin command")
+			return bCmd.Execute(cmd.Args, e.env, e.stdin, e.stdout)
+		}
+
+		// Проверка доступности команды
+		if !testMode {
+			//log.Println("Checking command availability...")
+			if _, err := exec.LookPath(cmd.Name); err != nil {
+				//log.Printf("Command not found: %v\n", err)
+				return fmt.Errorf("command not found: %w", err)
+			}
+		}
+
+		proc := exec.CommandContext(ctx, cmd.Name, cmd.Args...)
+		proc.Stdin = e.stdin
+		proc.Stdout = e.stdout
+		proc.Stderr = e.stderr
+
+		//log.Println("Starting external command...")
+		if err := proc.Start(); err != nil {
+			//log.Printf("Command start failed: %v\n", err)
+			return fmt.Errorf("start failed: %w", err)
+		}
+
+		//log.Println("Waiting for command to complete...")
+		err := proc.Wait()
+		//log.Printf("Command completed with error: %v\n", err)
+		return err
+	}
+*/
 func (e *Executor) Interrupt() {
 	e.procMutex.Lock()
 	defer e.procMutex.Unlock()
@@ -189,4 +286,42 @@ func (e *Executor) Close() error {
 	}
 	e.closers = nil
 	return nil
+}
+
+func (e *Executor) runGrepCommand(ctx context.Context, cmd *core.Command) error {
+	// Стандартные флаги grep из терминала
+	args := []string{
+		"--color=never",
+		"--exclude-dir=.bzr",
+		"--exclude-dir=CVS",
+		"--exclude-dir=.git",
+		"--exclude-dir=.hg",
+		"--exclude-dir=.svn",
+		"--exclude-dir=.idea",
+		"--exclude-dir=.tox",
+		"--exclude-dir=.venv",
+	}
+	args = append(args, cmd.Args...)
+
+	proc := exec.CommandContext(ctx, "grep", args...)
+	proc.Stdin = e.stdin
+	proc.Stdout = e.stdout
+	proc.Stderr = e.stderr
+
+	// Сохраняем процесс для возможного прерывания
+	e.procMutex.Lock()
+	if err := proc.Start(); err != nil {
+		e.procMutex.Unlock()
+		return fmt.Errorf("grep start failed: %w", err)
+	}
+	e.currentProc = proc.Process
+	e.procMutex.Unlock()
+
+	defer func() {
+		e.procMutex.Lock()
+		e.currentProc = nil
+		e.procMutex.Unlock()
+	}()
+
+	return proc.Wait()
 }
