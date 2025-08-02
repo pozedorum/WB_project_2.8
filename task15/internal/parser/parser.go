@@ -1,10 +1,19 @@
 package parser
 
 import (
+	"errors"
 	"task15/internal/core"
 )
 
-// TODO: Добавить обработку FD редиректов (2>&1)
+// Константы ошибок
+var (
+	ErrEmptyString          = errors.New("empty command string")
+	ErrNoFileForRedirect    = errors.New("no file specified for redirect")
+	ErrUnexpectedOperator   = errors.New("unexpected operator")
+	ErrMissingAfterOperator = errors.New("command expected after operator")
+	ErrMultipleOperators    = errors.New("multiple control operators")
+	ErrEmptyCommand         = errors.New("empty command before operator")
+)
 
 func ParseLine(str string) (*core.Command, error) {
 	tokens, err := tokenizeString(str)

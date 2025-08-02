@@ -13,8 +13,6 @@ type tokenWithQuotes struct {
 	inDoubleQ bool
 }
 
-// TODO: Сделать обработку системных переменных через $
-// TODO: Опционально добить обработку оставшихся токенов из structAndConst
 func tokenizeString(str string) ([]string, error) {
 	var tokens []tokenWithQuotes
 	var currentToken strings.Builder
@@ -36,10 +34,8 @@ func tokenizeString(str string) ([]string, error) {
 
 		case r == '\\':
 			if inSingleQuote {
-				// В одинарных кавычках сохраняем обратный слеш
 				currentToken.WriteRune(r)
 			} else {
-				// Вне кавычек или в двойных - экранируем следующий символ
 				escapeNext = true
 			}
 
@@ -139,17 +135,15 @@ func expandEnvVars(tokens []tokenWithQuotes) []string {
 
 		switch {
 		case token.inSingleQ:
-			// Оставляем как есть без изменений
 			result = append(result, content)
 
 		case token.inDoubleQ:
-			// Раскрываем переменные внутри двойных кавычек
+
 			result = append(result, os.ExpandEnv(content))
 		case strings.Contains(content, "\\$"):
 			content = strings.ReplaceAll(content, "\\$", "$")
 			result = append(result, content)
 		case strings.Contains(content, "$"):
-			// Раскрываем переменные в незакавыченных токенах
 			expanded := os.ExpandEnv(content)
 			if expanded != content {
 				result = append(result, strings.Fields(expanded)...)

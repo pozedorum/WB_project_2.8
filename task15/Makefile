@@ -22,7 +22,7 @@ coverage: test
 # Линтинг
 lint:
 	golangci-lint run ./...
-
+	go vet ./...
 # Очистка
 clean:
 	rm -rf GShell coverage.out *.txt
@@ -31,11 +31,3 @@ clean:
 run: build
 	./GShell
 
-# Форматирование кода
-fmt:
-	gofmt -w -s .
-	goimports -w .
-
-# Docker-образ
-docker-build:
-	docker build -t $(BIN_NAME) .

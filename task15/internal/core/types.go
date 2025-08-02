@@ -1,8 +1,10 @@
+// Package core -- Пакет с описанием основных структур терминала
 package core
 
+// Структура команды
 type Command struct {
-	Name      string
-	Args      []string
+	Name      string     // Имя команды
+	Args      []string   // Аргументы команды
 	Redirects []Redirect // >, <, >>
 	PipeTo    *Command   // |
 	AndNext   *Command   // &&

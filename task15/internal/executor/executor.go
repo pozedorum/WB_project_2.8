@@ -65,12 +65,12 @@ func (e *Executor) Execute(ctx context.Context, cmd *core.Command) error {
 	case cmd.PipeTo != nil:
 		return e.handlePipe(ctx, cmd)
 	case cmd.AndNext != nil:
-		if err = e.runCommand(ctx, cmd); err == nil { // Только если первая команда успешна
+		if err = e.runCommand(ctx, cmd); err == nil {
 			return e.Execute(ctx, cmd.AndNext)
 		}
 		return err
 	case cmd.OrNext != nil:
-		if err := e.runCommand(ctx, cmd); err != nil { // Только если первая команда неуспешна
+		if err := e.runCommand(ctx, cmd); err != nil {
 			return e.Execute(ctx, cmd.OrNext)
 		}
 		return nil
@@ -125,19 +125,18 @@ func (e *Executor) handlePipe(ctx context.Context, cmd *core.Command) error {
 
 	// Левый процесс (пишет в пайп)
 	go func() {
-		defer pw.Close() // Важно: закрываем pipe-writer после завершения команды
+		defer pw.Close()
 		tempExec := NewExecutor(e.builtins, e.env, e.stdin, pw)
 		errCh <- tempExec.runCommand(ctx, cmd)
 	}()
 
 	// Правый процесс (читает из пайпа)
 	go func() {
-		defer pr.Close() // Закрываем pipe-reader
+		defer pr.Close()
 		tempExec := NewExecutor(e.builtins, e.env, pr, e.stdout)
 		errCh <- tempExec.runCommand(ctx, cmd.PipeTo)
 	}()
 
-	// Ожидаем завершения
 	var firstErr, secondErr error
 	for i := 0; i < 2; i++ {
 		if err := <-errCh; err != nil && firstErr == nil {
@@ -177,7 +176,6 @@ func (e *Executor) runCommand(ctx context.Context, cmd *core.Command) error {
 		proc.Args = append(proc.Args, "-x") // Для macOS
 	}
 
-	// Сохраняем процесс для прерывания
 	e.procMutex.Lock()
 	if err := proc.Start(); err != nil {
 		e.procMutex.Unlock()
@@ -194,7 +192,7 @@ func (e *Executor) runCommand(ctx context.Context, cmd *core.Command) error {
 
 	err := proc.Wait()
 	if exitErr, ok := err.(*exec.ExitError); ok {
-		// Для внешних команд возвращаем ошибку с кодом возврата
+		// Вот тут можно добавить обработку тихих ошибок
 		return fmt.Errorf("exit status %d", exitErr.ExitCode())
 	}
 
@@ -228,4 +226,8 @@ func (e *Executor) Close() error {
 		return fmt.Errorf("errors while closing: %v", errs)
 	}
 	return nil
+}
+
+func (e *Executor) GetCurrentDirName() (string, error) {
+	return e.env.GetBaseWd()
 }

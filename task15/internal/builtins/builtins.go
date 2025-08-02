@@ -13,7 +13,7 @@ type BuiltinCommand interface {
 }
 
 type Registry struct {
-	commands map[string]BuiltinCommand
+	commands map[string]BuiltinCommand // Список builtin команд
 }
 
 func NewRegistry() *Registry {

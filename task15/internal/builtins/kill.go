@@ -63,12 +63,11 @@ func (kilu *KillUtil) Execute(args []string, env core.Environment, stdin io.Read
 }
 
 func parseSignal(sigStr string) (syscall.Signal, error) {
-	// Поддержка числовых сигналов
+
 	if sigNum, err := strconv.Atoi(sigStr); err == nil {
 		return syscall.Signal(sigNum), nil
 	}
 
-	// Поддержка символьных имён сигналов
 	switch sigStr {
 	case "SIGTERM", "TERM":
 		return syscall.SIGTERM, nil

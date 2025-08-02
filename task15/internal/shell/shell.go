@@ -1,3 +1,4 @@
+// Package shell отвечает за основной цикл работы терминала
 package shell
 
 import (
@@ -54,7 +55,14 @@ func (s *Shell) Run() {
 }
 
 func (s *Shell) readCommand(reader *bufio.Reader) bool {
-	fmt.Print("> ")
+	dirName, err := s.exec.GetCurrentDirName()
+	if err != nil {
+		dirName = "?"
+	}
+
+	//  Этот ужас нужен для зелёного цвета в терминале
+	fmt.Printf("\033[1;32m%s\033[0m > ", dirName)
+
 	line, err := reader.ReadString('\n')
 	if err != nil {
 		if err == io.EOF {

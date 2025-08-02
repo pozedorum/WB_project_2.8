@@ -159,7 +159,6 @@ func TestExecutorClosesResources(t *testing.T) {
 	}
 	defer os.Remove(tmpFile.Name())
 
-	// Добавляем файл в closers
 	e.closers = append(e.closers, tmpFile)
 
 	output := captureOutput(func() {
@@ -168,7 +167,6 @@ func TestExecutorClosesResources(t *testing.T) {
 		}
 	})
 
-	// Проверяем что файл действительно закрыт
 	_, err = tmpFile.Write([]byte("test"))
 	if err == nil {
 		t.Error("File should be closed after executor cleanup")
@@ -185,7 +183,7 @@ func TestCommandWithTimeout(t *testing.T) {
 	e := NewDefaultExecutor()
 
 	output := captureOutput(func() {
-		// Используем команду, которая точно не завершится мгновенно
+
 		cmd := &core.Command{
 			Name: "sleep",
 			Args: []string{"5"},
@@ -199,7 +197,6 @@ func TestCommandWithTimeout(t *testing.T) {
 			t.Fatal("Expected error, got nil")
 		}
 
-		// Проверяем, что команда завершилась ДО истечения 5 секунд (значит, прервана)
 		if duration >= 5*time.Second {
 			t.Errorf("Expected command to be interrupted, but it ran for full duration: %v", duration)
 		}
@@ -230,7 +227,7 @@ func TestCommandWithTimeout(t *testing.T) {
 
 func TestExecuteWithCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Отменяем контекст сразу
+	cancel()
 
 	e := NewDefaultExecutor()
 
@@ -307,7 +304,7 @@ func TestRedirectOutputToFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tmpFile.Close() // Закрываем, чтобы executor мог переоткрыть
+	tmpFile.Close()
 	defer os.Remove(tmpFile.Name())
 
 	e := NewDefaultExecutor()
@@ -343,14 +340,13 @@ func TestRedirectOutputToFile(t *testing.T) {
 }
 
 func TestRedirectInputFromFile(t *testing.T) {
-	// Создаем файл с данными
+
 	tmpFile, err := os.CreateTemp("", "test_input")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.Remove(tmpFile.Name())
 
-	// Явно записываем и закрываем файл
 	if _, err := tmpFile.WriteString("file content"); err != nil {
 		t.Fatal(err)
 	}

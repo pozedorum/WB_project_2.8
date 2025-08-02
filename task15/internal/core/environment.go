@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"os"
+	"path/filepath"
 )
 
 type Environment interface {
@@ -14,7 +15,8 @@ type Environment interface {
 	Setenv(key, value string) error // Установить переменную
 	Environ() []string              // Получить все переменные окружения
 
-	GetHomeDir() (string, error)
+	GetHomeDir() (string, error) // Получить домашнюю директорию
+	GetBaseWd() (string, error)  // Получить текущую директорию (для красиовго вывода)
 }
 
 // DefaultEnvironment - реализация Environment по умолчанию
@@ -46,4 +48,12 @@ func (e *DefaultEnvironment) Setenv(key, value string) error {
 
 func (e *DefaultEnvironment) Environ() []string {
 	return os.Environ()
+}
+
+func (e *DefaultEnvironment) GetBaseWd() (string, error) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Base(wd), nil
 }
