@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,12 +23,12 @@ func NewDownloader(storage *storage.Storage) *Downloader {
 	}
 }
 
-func (d *Downloader) Download(u *url.URL) (*models.Resource, error) {
+func (d *Downloader) Download(ctx context.Context, u *url.URL) (*models.Resource, error) {
 	if rs, ok := d.storage.Get(u.String()); ok {
 		return rs, nil
 	}
 
-	content, contentType, err := d.GetContent(u)
+	content, contentType, err := d.GetContent(ctx, u)
 	if err != nil {
 		return nil, err
 	}
@@ -40,10 +41,15 @@ func (d *Downloader) Download(u *url.URL) (*models.Resource, error) {
 	return rs, nil
 }
 
-func (d *Downloader) GetContent(u *url.URL) ([]byte, string, error) {
-	resp, err := d.client.Get(u.String())
+func (d *Downloader) GetContent(ctx context.Context, u *url.URL) ([]byte, string, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
 	if err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("create request failed: %w", err)
+	}
+
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {

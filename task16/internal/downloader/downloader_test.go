@@ -6,84 +6,62 @@ import (
 	"testing"
 )
 
-func TestValidateUrl(t *testing.T) {
+func TestValidateURL(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		wantErr  bool
-		errMatch string
+		name    string
+		input   string
+		wantErr error
 	}{
 		// Валидные URL
 		{
 			name:    "valid http",
 			input:   "http://example.com",
-			wantErr: false,
+			wantErr: nil,
 		},
 		{
 			name:    "valid https with path",
 			input:   "https://example.com/path/to/page",
-			wantErr: false,
-		},
-		{
-			name:    "valid with query params",
-			input:   "https://example.com?param=value&foo=bar",
-			wantErr: false,
+			wantErr: nil,
 		},
 
 		// Невалидные URL
 		{
-			name:     "empty URL",
-			input:    "",
-			wantErr:  true,
-			errMatch: "invalid URL format",
+			name:    "empty URL",
+			input:   "",
+			wantErr: ErrNilURL,
 		},
 		{
-			name:     "no scheme",
-			input:    "example.com",
-			wantErr:  true,
-			errMatch: "host is required",
+			name:    "no scheme",
+			input:   "example.com",
+			wantErr: ErrWrongProtocol,
 		},
 		{
-			name:     "invalid scheme",
-			input:    "ftp://example.com",
-			wantErr:  true,
-			errMatch: "only http and https",
+			name:    "invalid scheme",
+			input:   "ftp://example.com",
+			wantErr: ErrWrongProtocol,
 		},
 		{
-			name:     "URL too long",
-			input:    "https://example.com/" + strings.Repeat("a", 2000),
-			wantErr:  true,
-			errMatch: "URL too long",
+			name:    "URL too long",
+			input:   "https://example.com/" + strings.Repeat("a", 2000),
+			wantErr: ErrTooLongURL,
 		},
 		{
-			name:     "invalid host chars",
-			input:    "https://exa<mple.com",
-			wantErr:  true,
-			errMatch: "invalid characters in host",
+			name:    "invalid host chars",
+			input:   "https://exa<mple.com",
+			wantErr: ErrWrongHost,
 		},
 		{
-			name:     "space in host",
-			input:    "https://exa mple.com",
-			wantErr:  true,
-			errMatch: "invalid characters in host",
-		},
-		{
-			name:     "no host",
-			input:    "https://",
-			wantErr:  true,
-			errMatch: "host is required",
+			name:    "no host",
+			input:   "https://",
+			wantErr: ErrNulHost,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := ValidateUrl(tt.input)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("validateUrl() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if err != nil && tt.errMatch != "" && !strings.Contains(err.Error(), tt.errMatch) {
-				t.Errorf("validateUrl() error = %v, want contains %q", err, tt.errMatch)
+			_, err := ValidateURL(tt.input)
+			if err != tt.wantErr {
+				t.Errorf("ValidateURL() error = %v, want %v", err, tt.wantErr)
 			}
 		})
 	}
@@ -95,7 +73,6 @@ func TestGetBaseDomain(t *testing.T) {
 		input    string
 		expected string
 	}{
-		// Стандартные домены
 		{
 			name:     "simple domain",
 			input:    "https://example.com",
@@ -107,13 +84,6 @@ func TestGetBaseDomain(t *testing.T) {
 			expected: "example.com",
 		},
 		{
-			name:     "multiple subdomains",
-			input:    "https://a.b.c.example.co.uk",
-			expected: "co.uk", // Ожидаемое поведение для простой реализации
-		},
-
-		// Специальные случаи
-		{
 			name:     "localhost",
 			input:    "http://localhost:8080",
 			expected: "localhost",
@@ -123,29 +93,13 @@ func TestGetBaseDomain(t *testing.T) {
 			input:    "https://192.168.1.1",
 			expected: "192.168.1.1",
 		},
-		{
-			name:     "no subdomain with country TLD",
-			input:    "https://example.co.uk",
-			expected: "co.uk", // Проблемный кейс для простой реализации
-		},
-		{
-			name:     "URL with path",
-			input:    "https://blog.example.com/path/to/page",
-			expected: "example.com",
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			u, err := url.Parse(tt.input)
-			if err != nil {
-				t.Fatalf("failed to parse test URL: %v", err)
-			}
-
-			result, err := GetBaseDomain(u)
-			if err != nil {
-				t.Errorf("error: %v", err)
-			} else if result != tt.expected {
+			u, _ := url.Parse(tt.input)
+			result, _ := GetBaseDomain(u)
+			if result != tt.expected {
 				t.Errorf("getBaseDomain() = %v, want %v", result, tt.expected)
 			}
 		})

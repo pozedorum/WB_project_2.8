@@ -29,6 +29,26 @@ func NewStorage(baseDir string, rootBaseDomain string, rootURL *url.URL) *Storag
 	}
 }
 
+func MakeNewResource(u *url.URL, content []byte, contentType string) *models.Resource {
+	rs := &models.Resource{
+		URL:         u,
+		LocalPath:   MakeLocalPath(u),
+		Content:     content,
+		ContentType: contentType,
+		IsHTML:      strings.Contains(contentType, "text/html"),
+	}
+	return rs
+}
+
+func MakeLocalPath(u *url.URL) string {
+	path := u.Path
+	if u.Path == "" || strings.HasSuffix(path, "/") {
+		path += "index.html"
+	}
+	path, _ = strings.CutPrefix(path, "/")
+	return filepath.Clean(path)
+}
+
 func (s *Storage) Save(rs *models.Resource) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -49,6 +69,9 @@ func (s *Storage) Save(rs *models.Resource) error {
 
 func (s *Storage) saveToDisk(rs *models.Resource) error {
 	fullPath := filepath.Join(s.baseDir, rs.LocalPath)
+	if _, err := os.Stat(fullPath); err == nil {
+		return nil // Файл уже существует
+	}
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
 		return err
 	}
@@ -69,21 +92,6 @@ func (s *Storage) Get(urlKey string) (*models.Resource, bool) {
 	return res, ok
 }
 
-func MakeNewResource(u *url.URL, content []byte, contentType string) *models.Resource {
-	rs := &models.Resource{
-		URL:         u,
-		LocalPath:   MakeLocalPath(u),
-		Content:     content,
-		ContentType: contentType,
-		IsHTML:      strings.Contains(contentType, "text/html"),
-	}
-	return rs
-}
-
-func MakeLocalPath(u *url.URL) string {
-	path := u.Path
-	if u.Path == "" || strings.HasSuffix(u.Path, "/") {
-		path += "index.html"
-	}
-	return filepath.Clean(path)
+func (s *Storage) Clean() error {
+	return os.RemoveAll(s.baseDir)
 }

@@ -10,3 +10,5 @@ type Resource struct {
 	Links       []*Resource // Ссылки на связанные ресурсы (для HTML)
 	IsHTML      bool        // Флаг HTML-страницы
 }
+
+// Сюда можно поместить уровень рекурсии
