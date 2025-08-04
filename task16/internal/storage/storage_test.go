@@ -21,7 +21,7 @@ func TestStorage(t *testing.T) {
 	t.Run("Save and Get resource", func(t *testing.T) {
 		u, _ := url.Parse("https://example.com/page1")
 		content := []byte("test content")
-		rs := MakeNewResource(u, content, "text/html")
+		rs := NewResource(u, content, "text/html")
 
 		// Сохраняем ресурс
 		if err := store.Save(rs); err != nil {
@@ -47,7 +47,7 @@ func TestStorage(t *testing.T) {
 
 	t.Run("Save duplicate resource", func(t *testing.T) {
 		u, _ := url.Parse("https://example.com/page2")
-		rs := MakeNewResource(u, []byte("content"), "text/html")
+		rs := NewResource(u, []byte("content"), "text/html")
 
 		// Первое сохранение
 		if err := store.Save(rs); err != nil {
@@ -64,8 +64,8 @@ func TestStorage(t *testing.T) {
 		parentURL, _ := url.Parse("https://example.com/parent")
 		childURL, _ := url.Parse("https://example.com/child")
 
-		parent := MakeNewResource(parentURL, []byte("parent"), "text/html")
-		child := MakeNewResource(childURL, []byte("child"), "text/html")
+		parent := NewResource(parentURL, []byte("parent"), "text/html")
+		child := NewResource(childURL, []byte("child"), "text/html")
 
 		// Сохраняем оба ресурса
 		if err := store.Save(parent); err != nil {
@@ -122,12 +122,12 @@ func TestStorage(t *testing.T) {
 	})
 }
 
-func TestMakeNewResource(t *testing.T) {
+func TestNewResource(t *testing.T) {
 	u, _ := url.Parse("https://example.com/test")
 	content := []byte("content")
 	contentType := "text/html"
 
-	rs := MakeNewResource(u, content, contentType)
+	rs := NewResource(u, content, contentType)
 
 	if rs.URL.String() != u.String() {
 		t.Errorf("URL mismatch: got %q, want %q", rs.URL, u)
@@ -146,7 +146,7 @@ func TestMakeNewResource(t *testing.T) {
 	}
 
 	// Проверка для не-HTML ресурса
-	rs = MakeNewResource(u, content, "text/css")
+	rs = NewResource(u, content, "text/css")
 	if rs.IsHTML {
 		t.Error("IsHTML should be false for text/css")
 	}

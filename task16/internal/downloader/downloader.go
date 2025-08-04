@@ -6,9 +6,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
+
 	"task16/internal/models"
 	"task16/internal/storage"
-	"time"
 )
 
 type Downloader struct {
@@ -23,22 +24,29 @@ func NewDownloader(storage *storage.Storage) *Downloader {
 	}
 }
 
-func (d *Downloader) Download(ctx context.Context, u *url.URL) (*models.Resource, error) {
+func (d *Downloader) Download(ctx context.Context, u *url.URL) (*models.Resource, bool, error) {
+	// start := time.Now()
+	fmt.Printf("Downloading: %s\n", u.String()) // 🟢
+
+	// defer func() {
+	// 	fmt.Printf("Download finished: %s (took %v)\n", u.String(), time.Since(start)) // 🟢
+	// }()
+
 	if rs, ok := d.storage.Get(u.String()); ok {
-		return rs, nil
+		return rs, true, nil
 	}
 
 	content, contentType, err := d.GetContent(ctx, u)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	rs := storage.MakeNewResource(u, content, contentType)
+	rs := storage.NewResource(u, content, contentType)
 
 	if err := d.storage.Save(rs); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return rs, nil
+	return rs, false, nil
 }
 
 func (d *Downloader) GetContent(ctx context.Context, u *url.URL) ([]byte, string, error) {

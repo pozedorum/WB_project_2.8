@@ -8,11 +8,32 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+
 	"task16/config"
 	"task16/internal/downloader"
 	"task16/internal/parser"
 	"task16/internal/storage"
 )
+
+type linkWithDepth struct {
+	u     *url.URL
+	depth int
+}
+
+func NewLinkWithDepth(u *url.URL, depth int) *linkWithDepth {
+	return &linkWithDepth{u: u, depth: depth}
+}
+
+func NewListOfLinks(uList []*url.URL, depth int) []*linkWithDepth {
+	if uList == nil {
+		return nil
+	}
+	res := make([]*linkWithDepth, 0, len(uList))
+	for _, u := range uList {
+		res = append(res, NewLinkWithDepth(u, depth))
+	}
+	return res
+}
 
 func Wget(urlFrom string, depth int) error {
 	cnf := config.DefaultConfig()
@@ -31,23 +52,25 @@ func Wget(urlFrom string, depth int) error {
 	}
 
 	// Инициализация компонентов
-	store := storage.NewStorage(cnf.ResultDir, baseURL, u)
+	store := storage.NewStorage(baseURL, baseURL, u)
 	dl := downloader.NewDownloader(store)
 	p := parser.NewParser(u)
 
-	taskQueue := make(chan *url.URL, 100)
-	resQueue := make(chan error, 100)
-	doneList := make([]chan struct{}, cnf.WorkersCount)
+	taskQueue := make(chan *linkWithDepth, 2000)
+	resQueue := make(chan error, 2000)
 	allGood := make(chan struct{})
-	defer closeChannels(taskQueue, resQueue, doneList, allGood)
+
+	defer closeChannels(taskQueue, resQueue)
+
+	var taskWg sync.WaitGroup
+	taskQueue <- NewLinkWithDepth(u, 0)
+	taskWg.Add(1)
 
 	for i := 0; i < cnf.WorkersCount; i++ {
-		doneList[i] = make(chan struct{})
-		go worker(ctx, dl, p, depth, taskQueue, resQueue, doneList[i])
+		go worker(ctx, dl, p, depth, taskQueue, resQueue, &taskWg)
 	}
-	go warden(ctx, doneList, cnf.WorkersCount, allGood)
+	go warden(ctx, &taskWg, allGood)
 	// Начальная задача
-	taskQueue <- u
 
 	var firstErr error
 	errorCount := 0
@@ -68,11 +91,11 @@ func Wget(urlFrom string, depth int) error {
 			}
 			return firstErr
 		case <-ctx.Done():
+			fmt.Println("returning by context")
 			return firstErr
 
 		}
 	}
-	return nil
 }
 
 func setupSignalHandling(cancel context.CancelFunc) {
@@ -87,93 +110,77 @@ func setupSignalHandling(cancel context.CancelFunc) {
 }
 
 // Тут я воспользовался идеей с or, но наоборот, жду завершения всех воркеров
-func warden(ctx context.Context, channels []chan struct{}, workersCount int, allGood chan<- struct{}) {
-	counter := 0
-	var wg sync.WaitGroup
-	for _, ch := range channels {
-		wg.Add(1)
-		go func(ch <-chan struct{}) {
-			defer wg.Done()
-			select {
-			case <-ctx.Done():
-				return
-			case <-ch:
-				counter++
-				if counter == workersCount {
-					close(allGood)
-				}
-			}
-		}(ch)
-	}
+func warden(ctx context.Context, taskWg *sync.WaitGroup, allGood chan<- struct{}) {
+	done := make(chan struct{})
 	go func() {
-		wg.Wait()
-		close(allGood)
+		taskWg.Wait()
+		close(done)
 	}()
+
+	select {
+	case <-done:
+		close(allGood)
+	case <-ctx.Done():
+		return
+	}
 }
 
 func worker(ctx context.Context, dl *downloader.Downloader, p *parser.Parser,
-	maxDepth int, queue chan *url.URL, results chan<- error, done chan<- struct{}) {
-	defer func() {
-		close(done)
-	}()
+	maxDepth int, queue chan *linkWithDepth, results chan<- error, taskWg *sync.WaitGroup,
+) {
 	for {
 		select {
 		case <-ctx.Done():
+			// fmt.Println("Worker canceled via ctx")
 			return
-		case newURL, ok := <-queue:
+		case task, ok := <-queue:
+			// fmt.Printf("Processing URL (depth %d/%d): %s\n",
+			// 	newURL.depth, maxDepth, newURL.u.String())
 			if !ok {
 				return
 			}
-			if err := processURL(ctx, dl, p, newURL, maxDepth, queue); err != nil {
-				select {
-				case results <- err:
-				case <-ctx.Done():
-					return
-				}
-			}
-			maxDepth--
+			processTask(ctx, dl, p, task, maxDepth, queue, results, taskWg)
+
 		}
 	}
 	// воркер может несколько раз подряд обрабатывать ссылки одного слоя рекурсии, нужна отдельная функция следящая за уровнем рекурсии
 }
 
-func processURL(ctx context.Context, dl *downloader.Downloader, p *parser.Parser,
-	u *url.URL, maxDepth int, queue chan<- *url.URL) error {
+func processTask(ctx context.Context, dl *downloader.Downloader, p *parser.Parser,
+	task *linkWithDepth, maxDepth int, queue chan<- *linkWithDepth, results chan<- error, taskWg *sync.WaitGroup,
+) {
+	defer taskWg.Done() // Уменьшаем счётчик при завершении обработки
 
-	// 1. Скачиваем страницу
-	content, err := dl.Download(ctx, u)
+	// Скачивание и обработка
+	content, alreadyDownloaded, err := dl.Download(ctx, task.u)
 	if err != nil {
-		return err
+		results <- err
+		return
+	}
+	if alreadyDownloaded || task.depth >= maxDepth {
+		return
 	}
 
-	// 2. Парсим ссылки (если не превышена глубина)
-	if maxDepth > 0 {
-		links, err := p.ExtractLinks(content.Content)
-		if err != nil {
-			return err
-		}
-
-		// 3. Добавляем новые ссылки в очередь
-		for _, link := range links {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case queue <- link:
-			default:
-				// Если очередь переполнена, пропускаем ссылку
-				fmt.Printf("Queue full, skipping URL: %s\n", link)
-			}
-		}
+	// Парсинг и добавление новых задач
+	links, err := p.ExtractLinks(content.Content)
+	if err != nil {
+		results <- err
+		return
 	}
 
-	return nil
+	for _, link := range NewListOfLinks(links, task.depth+1) {
+		taskWg.Add(1) // Увеличиваем счётчик перед добавлением
+
+		select {
+		case queue <- link:
+		default:
+			taskWg.Done() // Если очередь переполнена
+			results <- fmt.Errorf("queue full, dropped: %s", link.u.String())
+		}
+	}
 }
 
-func closeChannels(taskQueue chan *url.URL, resQueue chan error, doneList []chan struct{}, allGood chan struct{}) {
+func closeChannels(taskQueue chan *linkWithDepth, resQueue chan error) {
 	close(taskQueue)
 	close(resQueue)
-	for _, ch := range doneList {
-		close(ch)
-	}
-	close(allGood)
 }

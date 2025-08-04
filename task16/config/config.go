@@ -22,7 +22,7 @@ func DefaultConfig() *Config {
 	return &Config{
 		ResultDir:    filepath.Join(".", "downloads"),
 		WorkersCount: 5,
-		Timeout:      time.Second * 10,
+		Timeout:      time.Second * 60,
 	}
 }
 

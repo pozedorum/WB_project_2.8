@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+
 	"task16/internal/wget"
 )
 
@@ -14,7 +15,10 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	wget.Wget(urlFrom, depth)
+	err = wget.Wget(urlFrom, depth)
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 func printUsage() {

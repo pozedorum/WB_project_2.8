@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
 	"task16/internal/models"
 )
 
@@ -17,7 +18,7 @@ type Storage struct {
 }
 
 func NewStorage(baseDir string, rootBaseDomain string, rootURL *url.URL) *Storage {
-	os.Mkdir(baseDir, 0755)
+	os.Mkdir(baseDir, 0o755)
 	return &Storage{
 		resources: make(map[string]*models.Resource),
 		baseDir:   baseDir,
@@ -29,7 +30,7 @@ func NewStorage(baseDir string, rootBaseDomain string, rootURL *url.URL) *Storag
 	}
 }
 
-func MakeNewResource(u *url.URL, content []byte, contentType string) *models.Resource {
+func NewResource(u *url.URL, content []byte, contentType string) *models.Resource {
 	rs := &models.Resource{
 		URL:         u,
 		LocalPath:   MakeLocalPath(u),
@@ -42,11 +43,25 @@ func MakeNewResource(u *url.URL, content []byte, contentType string) *models.Res
 
 func MakeLocalPath(u *url.URL) string {
 	path := u.Path
-	if u.Path == "" || strings.HasSuffix(path, "/") {
+	if path == "" || strings.HasSuffix(path, "/") {
 		path += "index.html"
 	}
-	path, _ = strings.CutPrefix(path, "/")
-	return filepath.Clean(path)
+
+	// Удаляем лишние символы из имени файла
+	base := filepath.Base(path)
+	ext := filepath.Ext(base)
+	if ext == "" {
+		base += ".html"
+	} else if len(ext) > 5 { // Слишком длинное расширение
+		base = base[:len(base)-len(ext)] + ".html"
+	}
+
+	// Ограничиваем длину имени файла
+	if len(base) > 100 {
+		base = base[:100] + filepath.Ext(base)
+	}
+
+	return filepath.Join(u.Host, filepath.Dir(path), base)
 }
 
 func (s *Storage) Save(rs *models.Resource) error {
@@ -72,10 +87,10 @@ func (s *Storage) saveToDisk(rs *models.Resource) error {
 	if _, err := os.Stat(fullPath); err == nil {
 		return nil // Файл уже существует
 	}
-	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(fullPath, rs.Content, 0644)
+	return os.WriteFile(fullPath, rs.Content, 0o644)
 }
 
 func (s *Storage) AddLink(parent, child *models.Resource) {
