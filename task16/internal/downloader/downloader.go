@@ -28,10 +28,6 @@ func (d *Downloader) Download(ctx context.Context, u *url.URL) (*models.Resource
 	// start := time.Now()
 	fmt.Printf("Downloading: %s\n", u.String()) // 🟢
 
-	// defer func() {
-	// 	fmt.Printf("Download finished: %s (took %v)\n", u.String(), time.Since(start)) // 🟢
-	// }()
-
 	if rs, ok := d.storage.Get(u.String()); ok {
 		return rs, true, nil
 	}

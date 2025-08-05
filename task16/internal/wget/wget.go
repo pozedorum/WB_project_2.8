@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -56,8 +57,8 @@ func Wget(urlFrom string, depth int) error {
 	dl := downloader.NewDownloader(store)
 	p := parser.NewParser(u)
 
-	taskQueue := make(chan *linkWithDepth, 2000)
-	resQueue := make(chan error, 2000)
+	taskQueue := make(chan *linkWithDepth, 5000)
+	resQueue := make(chan error, 5000)
 	allGood := make(chan struct{})
 
 	defer closeChannels(taskQueue, resQueue)
@@ -154,6 +155,9 @@ func processTask(ctx context.Context, dl *downloader.Downloader, p *parser.Parse
 	// Скачивание и обработка
 	content, alreadyDownloaded, err := dl.Download(ctx, task.u)
 	if err != nil {
+		if task.depth != 0 && strings.Contains(err.Error(), "404") {
+			return
+		}
 		results <- err
 		return
 	}

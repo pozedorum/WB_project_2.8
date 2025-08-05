@@ -17,6 +17,7 @@ var (
 	ErrWrongHost        = errors.New("invalid characters in host")
 	ErrWrongProtocol    = errors.New("only http and https protocols are allowed")
 	ErrNulHost          = errors.New("host is required")
+	ErrNotFound         = errors.New("resource is not found")
 )
 
 func ValidateURL(rawURL string) (*url.URL, error) {

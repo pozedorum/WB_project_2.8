@@ -7,3 +7,7 @@ build:
 
 clean:
 	rm -rf ./mywget
+
+lint:
+	golangci-lint run ./...
+	go vet ./...

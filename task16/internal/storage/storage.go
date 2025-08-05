@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"log"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -18,7 +19,9 @@ type Storage struct {
 }
 
 func NewStorage(baseDir string, rootBaseDomain string, rootURL *url.URL) *Storage {
-	os.Mkdir(baseDir, 0o755)
+	if err := os.Mkdir(baseDir, 0o755); err != nil && !os.IsExist(err) {
+		log.Fatalf("Failed to create directory: %v", err)
+	}
 	return &Storage{
 		resources: make(map[string]*models.Resource),
 		baseDir:   baseDir,
@@ -45,6 +48,9 @@ func MakeLocalPath(u *url.URL) string {
 	path := u.Path
 	if path == "" || strings.HasSuffix(path, "/") {
 		path += "index.html"
+	} else if filepath.Ext(path) == "" {
+		// Если путь не имеет расширения и не заканчивается на /, добавляем .html
+		path += ".html"
 	}
 
 	// Удаляем лишние символы из имени файла
@@ -69,8 +75,10 @@ func (s *Storage) Save(rs *models.Resource) error {
 	defer s.mu.Unlock()
 
 	key := rs.URL.String()
+	key2, _ := strings.CutSuffix(rs.URL.String(), "/")
 	_, ok := s.resources[key]
-	if ok {
+	_, ok2 := s.resources[key2]
+	if ok || ok2 {
 		return nil
 	}
 	s.resources[key] = rs
