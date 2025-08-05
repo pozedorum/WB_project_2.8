@@ -1,0 +1,3 @@
+ResutlDir="./downloads"
+WorkersCount=5
+Tiemout=60
