@@ -12,7 +12,7 @@ var (
 	ErrInternal          = errors.New("internal storage error") // 500
 	ErrNotFoundInStorage = errors.New("not found in storage")   // 404 (но это техническая ошибка, не бизнес-логика!)
 	ErrInvalidInput      = errors.New("invalid input data")
-	ErrAlreadyExists     = errors.New("event already exists")
+	ErrAlreadyExists     = errors.New("Event already exists")
 )
 
 type EventStorage struct {
@@ -71,5 +71,6 @@ func (es *EventStorage) GetByDateRange(start, end time.Time) []models.Event {
 }
 
 func isInRange(date, start, end time.Time) bool {
-	return !date.Before(start) && !date.After(end)
-}
+
+	return !date.Before(start) && !date.After(end) && !date.Equal(end)
+} // начало диапазона включительно, а конец нет

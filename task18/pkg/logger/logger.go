@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -16,6 +18,12 @@ type Logger struct {
 
 func New(logFile string, consoleLog bool) (*Logger, error) {
 
+	dir := filepath.Dir(logFile)
+	if dir != "" {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create log directory: %w", err)
+		}
+	}
 	file, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err
@@ -33,19 +41,29 @@ func (l *Logger) Middleware(next http.Handler) http.Handler {
 		start := time.Now()
 		next.ServeHTTP(w, r)
 		duration := time.Since(start)
-
-		l.log("[REQUEST]", r.Method, r.URL.Path, r.RemoteAddr, duration)
+		l.log("[REQUEST]", r.Method, r.URL.Path, r.RemoteAddr, duration.String())
 
 	})
 }
 
 func (l *Logger) LogError(r *http.Request, err error) {
+	if err == nil {
+		return
+	}
 	l.log("[ERROR]", r.Method, r.URL.Path, err.Error())
 
 }
 
-func (l *Logger) log(prefix string, v ...interface{}) {
-	msg := prefix + " " + fmt.Sprint(v...)
+func (l *Logger) LogInfo(info string) {
+	l.log("[INFO]", info)
+}
+
+func (l *Logger) log(prefix string, v ...string) {
+	parts := make([]string, 0, len(v)+1)
+	parts = append(parts, prefix)
+	parts = append(parts, v...)
+
+	msg := time.Now().Format("2006/01/02 15:04:05 ") + strings.Join(parts, " ")
 	l.fileLogger.Println(msg)
 
 	if l.consoleLog {

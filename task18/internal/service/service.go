@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"time"
 
 	"github.com/pozedorum/WB_project_2/task18/internal/apperrors"
@@ -24,31 +25,30 @@ func NewEventService(repo EventRepository) *EventService {
 }
 
 func (s *EventService) CreateEvent(event models.Event) error {
-
-	switch s.repo.CreateEvent(event) {
-	case storage.ErrInvalidInput:
+	err := s.repo.CreateEvent(event)
+	if errors.Is(err, storage.ErrInvalidInput) {
 		return apperrors.ErrInvalidInput
-	case storage.ErrAlreadyExists:
-		return apperrors.ErrAlreadyExists
-	default:
-		return nil
 	}
+	if errors.Is(err, storage.ErrAlreadyExists) {
+		return apperrors.ErrAlreadyExists
+	}
+	return err
 }
 
 func (s *EventService) UpdateEvent(event models.Event) error {
-
-	if err := s.repo.UpdateEvent(event); err == storage.ErrNotFoundInStorage {
+	err := s.repo.UpdateEvent(event)
+	if errors.Is(err, storage.ErrNotFoundInStorage) {
 		return apperrors.ErrNotFound
 	}
-	return nil
+	return err
 }
 
 func (s *EventService) DeleteEvent(event models.Event) error {
-
-	if err := s.repo.DeleteEvent(event); err == storage.ErrNotFoundInStorage {
+	err := s.repo.DeleteEvent(event)
+	if errors.Is(err, storage.ErrNotFoundInStorage) {
 		return apperrors.ErrNotFound
 	}
-	return nil
+	return err
 }
 
 func (s *EventService) GetDayEvents(userID string, date time.Time) ([]models.Event, error) {
@@ -58,7 +58,6 @@ func (s *EventService) GetDayEvents(userID string, date time.Time) ([]models.Eve
 	return s.getByDateRange(userID, date, date.AddDate(0, 0, 1)), nil
 }
 
-// GetWeekEvents - события на неделю
 func (s *EventService) GetWeekEvents(userID string, startWeek time.Time) ([]models.Event, error) {
 	if userID == "" {
 		return nil, apperrors.ErrInvalidInput
@@ -66,7 +65,6 @@ func (s *EventService) GetWeekEvents(userID string, startWeek time.Time) ([]mode
 	return s.getByDateRange(userID, startWeek, startWeek.AddDate(0, 0, 7)), nil
 }
 
-// GetMonthEvents - события на месяц
 func (s *EventService) GetMonthEvents(userID string, startMonth time.Time) ([]models.Event, error) {
 	if userID == "" {
 		return nil, apperrors.ErrInvalidInput
