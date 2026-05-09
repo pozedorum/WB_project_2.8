@@ -42,14 +42,3 @@ func ParseOptions() (*FlagStruct, []string) {
 
 	return &fs, flag.Args()
 }
-
-func (fs *FlagStruct) PrintFlags() {
-	fmt.Println("flag k -", *(fs.KFlag))
-	fmt.Println("flag n -", *(fs.NFlag))
-	fmt.Println("flag r -", *(fs.RFlag))
-	fmt.Println("flag u -", *(fs.UFlag))
-	fmt.Println("flag m -", *(fs.MFlag))
-	fmt.Println("flag b -", *(fs.BFlag))
-	fmt.Println("flag c -", *(fs.CFlag))
-	fmt.Println("flag h -", *(fs.HFlag))
-}

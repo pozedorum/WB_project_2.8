@@ -70,7 +70,7 @@ func ExternalSortToStdout(inputFile string, fs options.FlagStruct) error {
 	return err
 }
 
-func ProcessInteractiveInput(fs options.FlagStruct) {
+func ProcessInteractiveInput(fs options.FlagStruct) error {
 	reader := bufio.NewReader(os.Stdin)
 	var lines []string
 
@@ -87,7 +87,9 @@ func ProcessInteractiveInput(fs options.FlagStruct) {
 
 	// Сортируем и выводим
 	ss := MakeSortStruct(lines, fs)
-	ss.StringsSort()
+	if err := ss.StringsSort(); err != nil {
+		return err
+	}
 
 	writer := bufio.NewWriter(os.Stdout)
 	defer writer.Flush()
@@ -97,4 +99,5 @@ func ProcessInteractiveInput(fs options.FlagStruct) {
 			fmt.Printf("ExternalSortStruct.sortAndSaveChunk - file.WriteString: %v", err)
 		}
 	}
+	return nil
 }

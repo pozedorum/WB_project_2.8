@@ -28,7 +28,10 @@ func MakeExternalSortStruct(fs options.FlagStruct, inputFile, outputFile string,
 func ExternalSort(inputFile, outputFile string, fs options.FlagStruct) error {
 	ess := MakeExternalSortStruct(fs, inputFile, outputFile, ConstChunkSize)
 	if *ess.fs.CFlag {
-		if isSorted(ess.inputFile, fs) {
+		is, err := isSorted(ess.inputFile, fs)
+		if err != nil {
+			return err
+		} else if is {
 			fmt.Println("File is sorted")
 			return nil
 		} else {
@@ -60,35 +63,49 @@ func (ess *ExternalSortStruct) splitAndSort() error {
 		buffer = append(buffer, scanner.Text())
 		buflen++
 		if buflen >= ess.chunkSize {
-			ess.sortAndSaveChunk(fileInd, buffer)
+			if err := ess.sortAndSaveChunk(fileInd, buffer); err != nil {
+				return err
+			}
 			fileInd++
 			buffer = buffer[:0] // очищаем буфер
 			buflen = 0
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
 	if len(buffer) > 0 {
-		ess.sortAndSaveChunk(fileInd, buffer)
+		if err := ess.sortAndSaveChunk(fileInd, buffer); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-func (ess *ExternalSortStruct) sortAndSaveChunk(ind int, lines []string) {
+func (ess *ExternalSortStruct) sortAndSaveChunk(ind int, lines []string) error {
 	ss := MakeSortStruct(lines, ess.fs)
 
-	ss.StringsSort()
+	if err := ss.StringsSort(); err != nil {
+		return err
+	}
 
-	tmpFile := "chunk_" + strconv.Itoa(ind) + ".tmp"
-	f, _ := os.Create(tmpFile)
-	defer f.Close()
+	tmpFileName := "chunk_" + strconv.Itoa(ind) + ".tmp"
+	tmpFile, err := os.CreateTemp("", tmpFileName)
+	if err != nil {
+		return fmt.Errorf("error create temp chunk file: %w", err)
+	}
+	defer tmpFile.Close()
 
 	for _, line := range ss.lines {
-		if _, err := f.WriteString(line + "\n"); err != nil {
+		if _, err := tmpFile.WriteString(line + "\n"); err != nil {
 			fmt.Printf("ExternalSortStruct.sortAndSaveChunk - file.WriteString: %v", err)
+			return err
 		}
 	}
 
-	ess.tempFilesList = append(ess.tempFilesList, tmpFile)
+	ess.tempFilesList = append(ess.tempFilesList, tmpFile.Name())
+	return nil
 }
 
 func (ess *ExternalSortStruct) mergeChunks() error {
@@ -114,14 +131,25 @@ func (ess *ExternalSortStruct) mergeChunks() error {
 		scanners[i] = bufio.NewScanner(f)
 	}
 
-	// Инициализация кучи
-	h := &MinHeap{}
+	h := &MinHeap{
+		fs: ess.fs,
+	}
 	heap.Init(h)
 
-	// Загружаем первые строки каждого файла
 	for i, sc := range scanners {
 		if sc.Scan() {
-			heap.Push(h, HeapItem{line: sc.Text(), index: i})
+			line := sc.Text()
+
+			key, err := getKey(ess.fs, line)
+			if err != nil {
+				return err
+			}
+
+			heap.Push(h, HeapItem{
+				line:  line,
+				key:   key,
+				index: i,
+			})
 		}
 	}
 
@@ -136,20 +164,32 @@ func (ess *ExternalSortStruct) mergeChunks() error {
 				lastLine = item.line
 
 				if _, err := writer.WriteString(item.line + "\n"); err != nil {
-					fmt.Printf("ExternalSortStruct.mergeChunks - writer.WriteString(1): %v", err)
+					return err
 				}
+
 				firstLine = false
-			} else if getKey(ess.fs, item.line) != getKey(ess.fs, lastLine) {
+			} else {
+				itemKey, err := getKey(ess.fs, item.line)
+				if err != nil {
+					return err
+				}
 
-				lastLine = item.line
+				lastKey, err := getKey(ess.fs, lastLine)
+				if err != nil {
+					return err
+				}
 
-				if _, err := writer.WriteString(item.line + "\n"); err != nil {
-					fmt.Printf("ExternalSortStruct.mergeChunks - writer.WriteString(2): %v", err)
+				if itemKey != lastKey {
+					lastLine = item.line
+
+					if _, err := writer.WriteString(item.line + "\n"); err != nil {
+						return err
+					}
 				}
 			}
 		} else {
 			if _, err := writer.WriteString(item.line + "\n"); err != nil {
-				fmt.Printf("ExternalSortStruct.mergeChunks - writer.WriteString(3): %v", err)
+				return err
 			}
 		}
 
@@ -157,8 +197,14 @@ func (ess *ExternalSortStruct) mergeChunks() error {
 		if scanners[item.index].Scan() {
 			nextLine := scanners[item.index].Text()
 			if !(*ess.fs.UFlag && nextLine == lastLine) {
+				key, err := getKey(ess.fs, nextLine)
+				if err != nil {
+					return err
+				}
+
 				heap.Push(h, HeapItem{
 					line:  nextLine,
+					key:   key,
 					index: item.index,
 				})
 			}
@@ -170,6 +216,5 @@ func (ess *ExternalSortStruct) mergeChunks() error {
 		f.Close()
 		os.Remove(f.Name())
 	}
-	//fmt.Printf("result of sort locales by path: %s\n", ess.outputFile)
 	return nil
 }

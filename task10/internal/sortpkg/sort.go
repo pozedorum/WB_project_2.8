@@ -3,11 +3,11 @@ package sortpkg
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/pozedorum/WB_project_2/task10/pkg/options"
 )
@@ -34,24 +34,41 @@ func MakeSortStruct(lines []string, fs options.FlagStruct) *SortStruct {
 	return &SortStruct{lines, fs}
 }
 
-// res1 := getKey(ss.fs, ss.lines[i])
-// 		res2 := getKey(ss.fs, ss.lines[j])
+func (ss *SortStruct) StringsSort() error {
+	var sortErr error
 
-func (ss *SortStruct) StringsSort() {
 	sort.SliceStable(ss.lines, func(i, j int) bool {
-		res1 := getKey(ss.fs, ss.lines[i])
-		res2 := getKey(ss.fs, ss.lines[j])
+		if sortErr != nil {
+			return false
+		}
+
+		res1, err := getKey(ss.fs, ss.lines[i])
+		if err != nil {
+			sortErr = err
+			return false
+		}
+
+		res2, err := getKey(ss.fs, ss.lines[j])
+		if err != nil {
+			sortErr = err
+			return false
+		}
+
 		if res1 == "0" {
 			return true
 		}
 		if res2 == "0" {
 			return false
 		}
+
 		if *ss.fs.RFlag {
-			return res1 >= res2
+			return res1 > res2
 		}
-		return res1 < res2 // Устойчивая сортировка
+
+		return res1 < res2
 	})
+
+	return sortErr
 }
 
 // getKey возвращает ключ для сортировки на основе флагов
@@ -61,33 +78,32 @@ func (ss *SortStruct) StringsSort() {
 //   - Ошибка: если флаги конфликтуют
 //   - "0", если число 0, или строка без возможности сортировки
 
-func getKey(fs options.FlagStruct, str string) string {
-	var resPart string
+func getKey(fs options.FlagStruct, str string) (string, error) {
+	if (*fs.HFlag || *fs.NFlag) && *fs.MFlag {
+		return "", fmt.Errorf("flags -n/-h and -M are mutually exclusive")
+	}
+
 	parts := strings.Fields(str)
 
-	if *fs.KFlag < 1 || *fs.KFlag > len(parts) { // k flag -- sort by column number N
-		return "0"
-	} else {
-		resPart = parts[*fs.KFlag-1]
+	if *fs.KFlag < 1 || *fs.KFlag > len(parts) {
+		return "0", nil
 	}
 
-	if *fs.BFlag { // b flag -- ignore trailing blanks
-		resPart = strings.TrimSpace(resPart)
-	}
+	resPart := parts[*fs.KFlag-1]
 
-	if (*fs.HFlag || *fs.NFlag) && *fs.MFlag {
-		panic("flags -n/-h and -m are mutually exclusive")
+	if *fs.BFlag {
+		resPart = strings.TrimRightFunc(resPart, unicode.IsSpace)
 	}
 
 	switch {
 	case *fs.HFlag:
-		return parseHumanNumber(resPart)
+		return parseHumanNumber(resPart), nil
 	case *fs.NFlag:
-		return parseNumber(resPart)
+		return parseNumber(resPart), nil
 	case *fs.MFlag:
-		return parseMonth(resPart)
+		return parseMonth(resPart), nil
 	default:
-		return resPart
+		return resPart, nil
 	}
 }
 
@@ -135,35 +151,38 @@ func parseMonth(resPart string) string {
 }
 
 // log.Printf("warning: -c %s file is empty", filepath)
-func isSorted(filepath string, fs options.FlagStruct) bool {
+func isSorted(filepath string, fs options.FlagStruct) (bool, error) {
 	file, err := os.Open(filepath)
 	if err != nil {
-		log.Printf("Error opening file: %v", err)
-		return false
+		return false, fmt.Errorf("error opening file: %v", err)
 	}
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
 	if !scanner.Scan() {
 		// Пустой файл считается отсортированным
-		return true
+		return true, nil
 	}
 
 	prevLine := scanner.Text()
-	prevKey := getKey(fs, prevLine)
-
+	prevKey, err := getKey(fs, prevLine)
+	if err != nil {
+		return false, err
+	}
 	for scanner.Scan() {
 		currentLine := scanner.Text()
-		currentKey := getKey(fs, currentLine)
-
+		currentKey, err := getKey(fs, currentLine)
+		if err != nil {
+			return false, err
+		}
 		// Сравниваем ключи с учетом флага -r
 		if *fs.RFlag {
 			if currentKey > prevKey {
-				return false
+				return false, nil
 			}
 		} else {
 			if currentKey < prevKey {
-				return false
+				return false, nil
 			}
 		}
 
@@ -171,9 +190,8 @@ func isSorted(filepath string, fs options.FlagStruct) bool {
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Printf("Error reading file: %v", err)
-		return false
+		return false, fmt.Errorf("error reading file: %v", err)
 	}
 
-	return true
+	return true, nil
 }
