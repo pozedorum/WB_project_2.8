@@ -21,7 +21,7 @@ type FlagStruct struct {
 func ParseOptions() (*FlagStruct, []string) {
 	var fs FlagStruct
 
-	fs.KFlag = flag.IntP("k", "k", 1, "sort by column number N")
+	fs.KFlag = flag.IntP("k", "k", 0, "sort by column number N")
 	fs.NFlag = flag.BoolP("n", "n", false, "try to interpret strings as numbers and sort by it")
 	fs.RFlag = flag.BoolP("r", "r", false, "sort in reverse order")
 	fs.UFlag = flag.BoolP("u", "u", false, "output only sorted unique string")

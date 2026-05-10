@@ -58,7 +58,7 @@ $(TESTS): %: $(TEST_INPUT)
 	@rm -f $(TEST_OUTPUT)
 	@./mysort $($@_FLAGS) $(TEST_INPUT) >> $(TEST_OUTPUT)
 	@echo "Результат сохранен в $(TEST_OUTPUT)"
-	@echo "Ожидаемый результат в tets/expected_$@.txt"
+	@echo "Ожидаемый результат в tests/expected_$@.txt"
 #	@echo "Для сравнения выполните:"
 #   @echo "diff -u expected_$@.txt $(TEST_OUTPUT) || meld expected_$@.txt $(TEST_OUTPUT)"
 

@@ -1,7 +1,9 @@
 package sortpkg
 
 import (
+	"bytes"
 	"container/heap"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,9 +13,16 @@ import (
 	"github.com/pozedorum/WB_project_2/task10/pkg/options"
 )
 
-func testFlags(mods ...func(*options.FlagStruct)) options.FlagStruct {
-	k := 1
-	n, r, u, m, b, c, h := false, false, false, false, false, false, false
+func testFlags(modify func(*options.FlagStruct)) options.FlagStruct {
+	k := 0
+	n := false
+	r := false
+	u := false
+	m := false
+	b := false
+	c := false
+	h := false
+
 	fs := options.FlagStruct{
 		KFlag: &k,
 		NFlag: &n,
@@ -24,9 +33,11 @@ func testFlags(mods ...func(*options.FlagStruct)) options.FlagStruct {
 		CFlag: &c,
 		HFlag: &h,
 	}
-	for _, mod := range mods {
-		mod(&fs)
+
+	if modify != nil {
+		modify(&fs)
 	}
+
 	return fs
 }
 
@@ -150,4 +161,246 @@ func TestExternalSortMergeUsesFlagsUniqueAndTempDir(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
+}
+
+func TestIsSortedBasic(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "input.txt")
+
+	if err := os.WriteFile(file, []byte("apple\nbanana\ncherry\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	fs := testFlags(nil)
+
+	got, err := isSorted(file, fs)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !got {
+		t.Fatalf("expected file to be sorted")
+	}
+}
+
+func TestIsSortedReturnsFalse(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "input.txt")
+
+	if err := os.WriteFile(file, []byte("banana\napple\ncherry\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	fs := testFlags(nil)
+
+	got, err := isSorted(file, fs)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got {
+		t.Fatalf("expected file to be unsorted")
+	}
+}
+
+func TestIsSortedNumericByColumn(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "input.txt")
+
+	if err := os.WriteFile(file, []byte("a 1\nb 2\nc 10\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	fs := testFlags(func(fs *options.FlagStruct) {
+		*fs.NFlag = true
+		*fs.KFlag = 2
+	})
+
+	got, err := isSorted(file, fs)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !got {
+		t.Fatalf("expected file to be numerically sorted by column 2")
+	}
+}
+
+func TestIsSortedReverse(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "input.txt")
+
+	if err := os.WriteFile(file, []byte("cherry\nbanana\napple\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	fs := testFlags(func(fs *options.FlagStruct) {
+		*fs.RFlag = true
+	})
+
+	got, err := isSorted(file, fs)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !got {
+		t.Fatalf("expected file to be reverse sorted")
+	}
+}
+
+func TestIsSortedEmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "empty.txt")
+
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	fs := testFlags(nil)
+
+	got, err := isSorted(file, fs)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !got {
+		t.Fatalf("empty file should be considered sorted")
+	}
+}
+
+func TestIsSortedMissingFileReturnsError(t *testing.T) {
+	fs := testFlags(nil)
+
+	_, err := isSorted("missing-file.txt", fs)
+	if err == nil {
+		t.Fatalf("expected error for missing file")
+	}
+}
+
+func TestExternalSortToStdout(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "input.txt")
+
+	if err := os.WriteFile(input, []byte("banana\napple\ncherry\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	fs := testFlags(nil)
+
+	got := captureStdout(t, func() {
+		if err := ExternalSortToStdout(input, fs); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	want := "apple\nbanana\ncherry\n"
+
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestProcessStdio(t *testing.T) {
+	fs := testFlags(func(fs *options.FlagStruct) {
+		*fs.NFlag = true
+	})
+
+	got := captureStdio(t, "10\n2\n1\n", func() {
+		if err := ProcessStdio(fs); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	want := "1\n2\n10\n"
+
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestProcessInteractiveInput(t *testing.T) {
+	fs := testFlags(nil)
+
+	got := captureStdio(t, "banana\napple\ncherry\n", func() {
+		if err := ProcessInteractiveInput(fs); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	want := "apple\nbanana\ncherry\n"
+
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	oldStdout := os.Stdout
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	os.Stdout = w
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatal(err)
+	}
+
+	return buf.String()
+}
+
+func captureStdio(t *testing.T, input string, fn func()) string {
+	t.Helper()
+
+	oldStdin := os.Stdin
+	oldStdout := os.Stdout
+
+	stdinR, stdinW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stdoutR, stdoutW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := stdinW.WriteString(input); err != nil {
+		t.Fatal(err)
+	}
+	if err := stdinW.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	os.Stdin = stdinR
+	os.Stdout = stdoutW
+
+	fn()
+
+	if err := stdoutW.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	os.Stdin = oldStdin
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, stdoutR); err != nil {
+		t.Fatal(err)
+	}
+
+	return buf.String()
 }

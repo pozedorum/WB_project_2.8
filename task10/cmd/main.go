@@ -23,7 +23,10 @@ func main() {
 				log.Fatal(err)
 			}
 		} else {
-			sortpkg.ProcessInteractiveInput(*fs)
+			err := sortpkg.ProcessInteractiveInput(*fs)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 	} else {
 		log.Fatal("too much files ")

@@ -83,13 +83,17 @@ func getKey(fs options.FlagStruct, str string) (string, error) {
 		return "", fmt.Errorf("flags -n/-h and -M are mutually exclusive")
 	}
 
-	parts := strings.Fields(str)
+	resPart := str
 
-	if *fs.KFlag < 1 || *fs.KFlag > len(parts) {
-		return "0", nil
+	if *fs.KFlag != 0 {
+		parts := strings.Fields(str)
+
+		if *fs.KFlag < 1 || *fs.KFlag > len(parts) {
+			return "0", nil
+		}
+
+		resPart = parts[*fs.KFlag-1]
 	}
-
-	resPart := parts[*fs.KFlag-1]
 
 	if *fs.BFlag {
 		resPart = strings.TrimRightFunc(resPart, unicode.IsSpace)

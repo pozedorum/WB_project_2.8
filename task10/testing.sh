@@ -1,10 +1,11 @@
 #!/bin/bash
 
-# Конфигурация тестов
+set -u
+
 TEST_INPUT="tests/test_input.txt"
+OUTPUT_DIR="tests/output"
 
 TESTS=(
-    # Название теста         Флаги        Ожидаемый вывод
     "basic_sort"            ""           "tests/expected_basic.txt"
     "numeric_sort"          "-n -k 2"    "tests/expected_numeric.txt"
     "month_sort"            "-M -k 3"    "tests/expected_month.txt"
@@ -15,79 +16,74 @@ TESTS=(
     "complex_sort"          "-k 3 -M -u" "tests/expected_complex.txt"
 )
 
-# Функция сравнения результатов
 run_test() {
     local test_name=$1
     local flags=$2
     local expected_file=$3
-    
+
+    local output_file="${OUTPUT_DIR}/${test_name}.out"
+    local diff_file="${OUTPUT_DIR}/${test_name}.diff"
+
     echo "Running test: $test_name"
-    
-    # Удаляем предыдущий результат, если есть
-    rm -f "${TEST_INPUT%.txt}_sorted.txt"
-    echo "Command: ./mysort $flags $TEST_INPUT >> tests/test_input_sorted.txt"
-    
-    
-    
-    # Выполняем команду
-    ./mysort $flags "$TEST_INPUT" >> "tests/test_input_sorted.txt"
-    
-    # Сравниваем с ожидаемым результатом
-    if diff -u "$expected_file" "${TEST_INPUT%.txt}_sorted.txt" > "diff_${test_name}.txt"; then
-        echo "✅ PASSED: $test_name"
-        rm "diff_${test_name}.txt"
-        return 0
-    else
+
+    rm -f "$output_file" "$diff_file"
+
+    # shellcheck disable=SC2206
+    local flags_array=($flags)
+
+    echo "Command: ./mysort ${flags_array[*]} $TEST_INPUT > $output_file"
+
+    if ! ./mysort "${flags_array[@]}" "$TEST_INPUT" > "$output_file"; then
         echo "❌ FAILED: $test_name"
-        echo "Differences:"
-        cat "diff_${test_name}.txt"
-        rm "diff_${test_name}.txt"
+        echo "Program exited with error"
         return 1
     fi
+
+    if diff -u "$expected_file" "$output_file" > "$diff_file"; then
+        echo "✅ PASSED: $test_name"
+        rm -f "$diff_file"
+        return 0
+    fi
+
+    echo "❌ FAILED: $test_name"
+    echo "Differences:"
+    cat "$diff_file"
+    return 1
 }
 
-# Основная функция
 main() {
-    if [ ! -f "$TEST_INPUT" ]; then
-        echo "Error: Test input file $TEST_INPUT not found!"
-        echo "Please create it manually with following content:"
-        echo
-        cat <<EOF
-apple 5 Jan 100K
-banana 3 Feb 200M
-apple 5 Mar 300G
-cherry 1 Apr 400
-date 12 May 500T
-fig 7 Jun 600K
-grape 8 Jul 700
-banana 9 Aug 800M
-kiwi 11 Sep 900G
-lemon 4 Oct 1000
-orange 2 Nov 1100T
-pear 10 Dec 1200K
-EOF
-        echo
+    if [ ! -x ./mysort ]; then
+        echo "Error: ./mysort not found or not executable"
+        echo "Build it first, for example:"
+        echo "go build -o mysort ./cmd/mysort"
         exit 1
     fi
-    
-    total_tests=0
-    passed_tests=0
-    
+
+    if [ ! -f "$TEST_INPUT" ]; then
+        echo "Error: Test input file $TEST_INPUT not found!"
+        exit 1
+    fi
+
+    mkdir -p "$OUTPUT_DIR"
+
+    local total_tests=0
+    local passed_tests=0
+
     for ((i=0; i<${#TESTS[@]}; i+=3)); do
         ((total_tests++))
+
         if run_test "${TESTS[i]}" "${TESTS[i+1]}" "${TESTS[i+2]}"; then
             ((passed_tests++))
         fi
+
         echo
     done
-    
-    # Итоговая статистика
+
     echo "Test results:"
     echo "✅ $passed_tests passed"
     echo "❌ $((total_tests - passed_tests)) failed"
-    
-    # Возвращаем код ошибки, если есть проваленные тесты
-    if [ $passed_tests -ne $total_tests ]; then
+
+    if [ "$passed_tests" -ne "$total_tests" ]; then
         exit 1
     fi
 }

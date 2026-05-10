@@ -30,8 +30,8 @@ run_test() {
     rm -f "$EXPECTED_OUTPUT" "$ACTUAL_OUTPUT"
     
     # 1. Запускаем оригинальный sort и сохраняем результат
-    echo "Original sort command: sort $flags $TEST_INPUT"
-    sort $flags "$TEST_INPUT" > "$EXPECTED_OUTPUT"
+    echo "Original sort command: sort -s $flags $TEST_INPUT"
+    sort -s $flags "$TEST_INPUT" > "$EXPECTED_OUTPUT"
     
     # 2. Запускаем вашу утилиту
     ./mysort $flags "$TEST_INPUT" >> "$ACTUAL_OUTPUT"
