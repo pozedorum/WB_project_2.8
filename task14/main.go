@@ -1,38 +1,10 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"sync"
+	"task14/or"
 	"time"
 )
-
-// Синтаксический анализатор жалуется на то, что контекст отменяется не во всех ветках,
-// но это нужно, чтобы закрывать все горутины при заверщении одной из них
-
-func or(channels ...<-chan interface{}) <-chan interface{} {
-	var once sync.Once
-	res := make(chan interface{})
-	ctx, cancel := context.WithCancel(context.Background())
-
-	for _, ch := range channels {
-		go func(ch <-chan interface{}) {
-			defer cancel()
-			select {
-			case <-ctx.Done():
-				return
-			case _, ok := <-ch:
-				if !ok {
-					once.Do(func() {
-						close(res)
-					})
-				}
-			}
-		}(ch)
-	}
-
-	return res
-}
 
 func main() {
 	sig := func(after time.Duration) <-chan interface{} {
@@ -45,7 +17,7 @@ func main() {
 	}
 
 	start := time.Now()
-	<-or(
+	<-or.Or(
 		sig(2*time.Hour),
 		sig(5*time.Minute),
 		sig(1*time.Second),
