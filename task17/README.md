@@ -27,3 +27,6 @@ make test
 ```
 make lint
 ```
+
+Я исправил все замечания, а так же добавил покрытие юнит тестами (около 90%) 
+`go test -coverprofile=coverage.out ./telnet/*`

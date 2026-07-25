@@ -22,7 +22,7 @@ func main() {
 	host := args[0]
 	port := args[1]
 
-	if err := telnet.RunTelnetClient(host, port, time.Duration(*timeout)*time.Second); err != nil {
+	if err := telnet.RunTelnetClient(host, port, time.Duration(*timeout)*time.Second, os.Stdin, os.Stdout); err != nil {
 		fmt.Printf("Error: %v\n", err)
 		printUsage()
 		os.Exit(1)

@@ -5,131 +5,98 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"io"
 	"net"
-	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 )
 
 var errEOF = errors.New("EOF (Ctrl+D pressed)")
 
-func RunTelnetClient(host string, port string, timeout time.Duration) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	setupSignalHandling(cancel)
+func RunTelnetClient(host, port string, timeout time.Duration, input io.Reader, output io.Writer) error {
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		syscall.SIGTERM,
+		syscall.SIGINT,
+	)
+	defer stop()
 
-	var d net.Dialer
-	dialctx, dialCancel := context.WithTimeout(ctx, timeout)
-	defer dialCancel()
-	conn, err := d.DialContext(dialctx, "tcp", host+":"+port)
+	dialCtx, cancelDial := context.WithTimeout(ctx, timeout)
+	defer cancelDial()
+
+	var dialer net.Dialer
+
+	conn, err := dialer.DialContext(
+		dialCtx,
+		"tcp",
+		net.JoinHostPort(host, port),
+	)
 	if err != nil {
-		return err
+		return fmt.Errorf("connect: %w", err)
 	}
-	tcpConn := conn.(*net.TCPConn)
-	defer conn.Close()
-	if err := conn.SetDeadline(time.Now().Add(1 * time.Second)); err != nil {
-		return err
-	}
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if err := conn.SetDeadline(time.Now().Add(1 * time.Second)); err != nil { // Новый дедлайн
-					log.Fatal(err)
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
 
-	var wg sync.WaitGroup
-	wg.Add(2)
+	return runSession(ctx, conn, input, output)
+}
+
+func runSession(ctx context.Context, conn net.Conn, input io.Reader, output io.Writer) error {
 	errCh := make(chan error, 2)
 
-	go func() {
-		if err := sendToSocket(ctx, tcpConn); err != nil {
-			if errors.Is(err, errEOF) {
-				errCh <- nil
-			} else {
-				errCh <- fmt.Errorf("send error: %w", err)
-			}
+	defer conn.Close()
 
-			cancel()
-		}
-		wg.Done()
+	go func() {
+		errCh <- sendToSocket(conn, input)
 	}()
 
 	go func() {
-		if err := getFromSocket(ctx, tcpConn); err != nil {
-			errCh <- fmt.Errorf("read error: %w", err)
-			cancel()
-		}
-		wg.Done()
+		errCh <- getFromSocket(conn, output)
 	}()
-	wg.Wait()
-	close(errCh)
-	return <-errCh
+
+	select {
+	case <-ctx.Done():
+		return nil
+
+	case err := <-errCh:
+
+		if err == nil || errors.Is(err, errEOF) || errors.Is(err, net.ErrClosed) {
+			return nil
+		}
+		return err
+
+	}
 }
 
-func getFromSocket(ctx context.Context, conn *net.TCPConn) error {
-
+func getFromSocket(conn net.Conn, output io.Writer) error {
 	scanner := bufio.NewScanner(conn)
-	for {
-		select {
-		case <-ctx.Done():
-			fmt.Println("\nStopping socket reader...")
-			return nil
-		default:
-			if !scanner.Scan() {
-				if errors.Is(scanner.Err(), os.ErrDeadlineExceeded) {
-					// Дедлайн
-					return ctx.Err()
-				}
-				if err := scanner.Err(); err != nil {
-					return err
-				} else {
-					return errors.New("server closed connection")
-				}
-			}
-			text := scanner.Text()
-			//fmt.Println("Server says:", text)
-			fmt.Println(text)
+
+	for scanner.Scan() {
+		if _, err := fmt.Fprintln(output, scanner.Text()); err != nil {
+			return fmt.Errorf("write output: %w", err)
 		}
 	}
-}
 
-func sendToSocket(ctx context.Context, conn net.Conn) error {
-	scanner := bufio.NewScanner(os.Stdin)
-	for {
-		select {
-		case <-ctx.Done():
-			fmt.Println("\nStopping socket writer...")
+	if err := scanner.Err(); err != nil {
+		if errors.Is(err, net.ErrClosed) {
 			return nil
-		default:
-			if !scanner.Scan() {
-				return errEOF
-			}
-			text := scanner.Text() + "\n"
-			if _, err := conn.Write([]byte(text)); err != nil {
-
-				return err
-			}
 		}
-
+		return fmt.Errorf("read socket: %w", err)
 	}
+
+	return nil
 }
 
-func setupSignalHandling(cancel context.CancelFunc) {
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGTERM)
-	go func() {
-		<-sig
-		cancel()
-	}()
+func sendToSocket(conn net.Conn, input io.Reader) error {
+	scanner := bufio.NewScanner(input)
+
+	for scanner.Scan() {
+		if _, err := fmt.Fprintln(conn, scanner.Text()); err != nil {
+			return fmt.Errorf("write socket: %w", err)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("read input: %w", err)
+	}
+
+	return errEOF
 }
